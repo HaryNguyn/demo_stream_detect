@@ -5,6 +5,8 @@ import sys
 import os
 from pathlib import Path
 from urllib.parse import urlparse
+from collections import deque
+from threading import Thread
 
 if sys.platform == "win32":
     import winreg
@@ -38,6 +40,7 @@ def corporate_proxy():
                         name, value = entry.split("=", 1)
                         if name.lower() in {"http", "https"}:
                             return value if "://" in value else f"http://{value}"
+                    return None
                 return server if "://" in server else f"http://{server}"
     except (OSError, ValueError):
         pass
@@ -82,6 +85,28 @@ def stop_process(process):
         process.stdout.close()
 
 
+class ProcessErrors:
+    """Drain stderr continuously so a verbose child cannot block video output."""
+
+    def __init__(self, process):
+        self.chunks = deque(maxlen=64)
+        self.thread = Thread(target=self._drain, args=(process.stderr,), daemon=True)
+        self.thread.start()
+
+    def _drain(self, stream):
+        try:
+            while chunk := stream.read(1024):
+                self.chunks.append(chunk)
+        finally:
+            stream.close()
+
+    def text(self):
+        return b"".join(list(self.chunks)).decode("utf-8", errors="replace").strip()
+
+    def finish(self):
+        self.thread.join(timeout=5)
+
+
 class FfmpegStreamCapture:
     WIDTH = 1280
     HEIGHT = 720
@@ -98,19 +123,19 @@ class FfmpegStreamCapture:
             process_env["HTTPS_PROXY"] = proxy
             process_env["http_proxy"] = proxy
             process_env["https_proxy"] = proxy
-        input_options = (
-            [
-                "-analyzeduration", "1000000", "-rw_timeout", "15000000",
+        is_http = stdin is None and url.startswith(("http://", "https://"))
+        is_network = stdin is None and url.startswith(("http://", "https://", "rtsp://", "rtsps://"))
+        input_options = ["-rw_timeout", "15000000"] if is_network else []
+        if is_http:
+            input_options.extend([
                 "-reconnect", "1", "-reconnect_streamed", "1",
                 "-reconnect_delay_max", "10",
-            ]
-            if stdin is None else []
-        )
-        if proxy and stdin is None:
+            ])
+        if proxy and is_http:
             input_options.extend(["-http_proxy", proxy])
         self.process = subprocess.Popen(
             [
-                ffmpeg, "-loglevel", "error", "-fflags", "nobuffer",
+                ffmpeg, "-loglevel", "error",
                 *input_options, "-i", url,
                 "-vf", f"scale={self.WIDTH}:{self.HEIGHT}:force_original_aspect_ratio=decrease,"
                        f"pad={self.WIDTH}:{self.HEIGHT}:(ow-iw)/2:(oh-ih)/2",
@@ -122,6 +147,7 @@ class FfmpegStreamCapture:
             stderr=subprocess.PIPE,
             env=process_env,
         )
+        self.errors = ProcessErrors(self.process)
         self.frame_size = self.WIDTH * self.HEIGHT * 3
 
     def isOpened(self):
@@ -144,14 +170,12 @@ class FfmpegStreamCapture:
 
     def release(self):
         stop_process(self.process)
+        self.errors.finish()
 
     def error_text(self):
-        if self.process.stderr is None or self.process.poll() is None:
-            return ""
-        try:
-            return self.process.stderr.read().decode("utf-8", errors="replace").strip()
-        except Exception:
-            return ""
+        if self.process.poll() is not None:
+            self.errors.finish()
+        return self.errors.text()
 
 
 class WebStreamCapture(FfmpegStreamCapture):
@@ -181,10 +205,12 @@ class WebStreamCapture(FfmpegStreamCapture):
             command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             env=process_env,
         )
+        self.download_errors = ProcessErrors(self.downloader)
         try:
             super().__init__("pipe:0", stdin=self.downloader.stdout)
         except Exception:
             stop_process(self.downloader)
+            self.download_errors.finish()
             raise
         finally:
             if self.downloader.stdout:
@@ -195,17 +221,16 @@ class WebStreamCapture(FfmpegStreamCapture):
             super().release()
         finally:
             stop_process(self.downloader)
+            self.download_errors.finish()
 
     def error_text(self):
         parts = []
         ffmpeg_error = super().error_text()
         if ffmpeg_error:
             parts.append(f"FFmpeg: {ffmpeg_error}")
-        if self.downloader.stderr is not None and self.downloader.poll() is not None:
-            try:
-                yt_error = self.downloader.stderr.read().decode("utf-8", errors="replace").strip()
-                if yt_error:
-                    parts.append(f"yt-dlp: {yt_error}")
-            except Exception:
-                pass
+        if self.downloader.poll() is not None:
+            self.download_errors.finish()
+        yt_error = self.download_errors.text()
+        if yt_error:
+            parts.append(f"yt-dlp: {yt_error}")
         return "\n".join(parts)

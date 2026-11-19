@@ -332,7 +332,7 @@ và ở cuối phiên; giao diện chỉ giữ mẫu gần nhất, không hiển
 
 | Thông số | Giá trị | Vị trí |
 |---|---|---|
-| Model xe | `yolo11n.pt` | `app.py` |
+| Model xe | `models/yolo11n.pt` | `app.py` |
 | Confidence xe | 0,2 | `pipeline.py::analyze_video` |
 | Tracker | `bytetrack.yaml` | `pipeline.py::analyze_video` |
 | Confidence logo | 0,4 | `pipeline.py::recognize_vehicle` |

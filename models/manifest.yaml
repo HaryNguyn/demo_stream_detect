@@ -1,0 +1,22 @@
+version: 1
+baseline:
+  version: baseline-001
+  upstream_code: https://github.com/HaryNguyn/demo_stream_detect
+  upstream_commit: e7a5231
+  vehicle:
+    path: yolo11n.pt
+    family: Ultralytics YOLO11 COCO
+    class_ids: [2, 3, 5, 7]
+  plate:
+    path: DetectLisence_YOLO11.pt
+    referenced_source: https://github.com/ddkhoa2605/LicensePlateDetection
+  ocr:
+    path: cct_s_v1_vn.onnx
+    config: cct_s_v1_vn_plate_config.yaml
+    decoder: character_slots
+  logo:
+    path: logo.pt
+    provenance: Bundled in upstream demo; verify exact training dataset/license before redistribution.
+  note: SHA-256 of actual model files is recorded automatically in each experiment run.json.
+candidate:
+  note: vehicle-reviewed-v001 was trained and evaluated, then its weights were removed. The original baseline remains active.

@@ -1,39 +1,11 @@
-"""Durable vehicle events stored in MariaDB."""
-import os
-import sys
+"""MariaDB implementation of the event repository."""
 import json
 from datetime import datetime, timezone
 from uuid import uuid4
-
-import pymysql
-
-
-def get_setting(name, default=None, required=False):
-    value = os.environ.get(name)
-    if value:
-        return value
-    if sys.platform == "win32":
-        try:
-            import winreg
-
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Environment",
-            ) as key:
-                value, _ = winreg.QueryValueEx(key, name)
-                if value:
-                    return value
-        except (OSError, ValueError):
-            pass
-    if required:
-        raise RuntimeError(
-            f"Thiếu cấu hình MariaDB: {name}. "
-            "Đặt biến môi trường hoặc khởi động lại VS Code."
-        )
-    return default
+from ..settings import get_setting
 
 
-class EventStore:
+class MariaDBEventStore:
     def __init__(self):
         self.config = {
             "host": get_setting("MARIADB_HOST", "127.0.0.1"),
@@ -43,9 +15,28 @@ class EventStore:
             "password": get_setting("MARIADB_PASSWORD", required=True),
             "charset": "utf8mb4",
             "autocommit": True,
+            "connect_timeout": 10,
         }
+        with self.connect() as db:
+            with db.cursor() as cursor:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS events (
+                        event_id CHAR(36) NOT NULL PRIMARY KEY,
+                        recorded_at DATETIME(6) NOT NULL,
+                        camera VARCHAR(255), xe_id VARCHAR(255),
+                        track_id BIGINT, started_at DOUBLE, ended_at DOUBLE,
+                        vehicle_type VARCHAR(100), brand VARCHAR(100),
+                        brand_score DOUBLE, plate VARCHAR(100), plate_score DOUBLE,
+                        images JSON, INDEX ix_recorded_at (recorded_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                """)
+                cursor.execute("SHOW COLUMNS FROM events LIKE 'xe_id'")
+                if cursor.fetchone() is None:
+                    cursor.execute("ALTER TABLE events ADD COLUMN xe_id VARCHAR(255)")
 
     def connect(self):
+        import pymysql
+
         return pymysql.connect(**self.config)
 
     def append(self, row):
@@ -58,7 +49,6 @@ class EventStore:
         event.pop("Ảnh xe", None)
         event.pop("Ảnh biển số", None)
         plate = event.get("Biển số", "")
-        brand = event.get("Hãng", "")
         xe_id = plate if plate else f"TRACK-{event.get('Track ID', 0)}"
         event["Xe ID"] = xe_id
         with self.connect() as db:

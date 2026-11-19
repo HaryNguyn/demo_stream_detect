@@ -1,0 +1,32 @@
+services:
+  inference:
+    build: .
+    image: vehicle-ai:0.1.0-cpu
+    init: true
+    volumes:
+      - ./models:/app/models:ro
+      - ./configs:/app/configs:ro
+      - ./data:/app/data:ro
+      - ./runtime:/app/runtime
+    command: ["python", "-m", "vehicle_ai", "--help"]
+
+  ui:
+    profiles: ["ui"]
+    build: .
+    image: vehicle-ai:0.1.0-cpu
+    init: true
+    restart: unless-stopped
+    ports: ["8501:8501"]
+    env_file: .env
+    environment:
+      VDTC_IMAGE_ROOT: /app/runtime/images
+    volumes:
+      - ./models:/app/models:ro
+      - ./configs:/app/configs:ro
+      - ./runtime:/app/runtime
+    command: ["python", "-m", "streamlit", "run", "app.py", "--server.address=0.0.0.0", "--server.headless=true"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

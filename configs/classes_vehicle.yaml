@@ -1,0 +1,6 @@
+# IDs after training on this custom dataset are 0..3, unlike COCO's 2,3,5,7.
+names:
+  - Ô tô con
+  - Xe máy
+  - Xe buýt
+  - Xe tải

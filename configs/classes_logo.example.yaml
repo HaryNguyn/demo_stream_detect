@@ -1,0 +1,5 @@
+# Replace with your actual annotation taxonomy before training.
+names:
+  - Toyota
+  - Honda
+  - Ford

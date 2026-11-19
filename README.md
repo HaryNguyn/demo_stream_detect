@@ -1,60 +1,106 @@
-# Demo nhận diện xe từ video
+# Vehicle AI
 
-Hướng dẫn PowerShell chi tiết: [Chạy ứng dụng, sao lưu và xóa dữ liệu](HUONG_DAN_CHAY.md).
+Nhận diện xe, loại xe, biển số và logo từ video/camera thử nghiệm.
+Gồm pipeline theo dõi xe, UI nhận diện, duyệt nhãn/ROI, CLI train và đánh giá.
 
-## Bộ tài liệu dự án
+## Chạy
 
-- [Tài liệu dự án](docs/TAI_LIEU_DU_AN.md): phạm vi, kiến trúc, model, dữ liệu sự kiện, kiểm thử và lộ trình AI Box.
-- [Thuật toán xử lý](docs/THUAT_TOAN_XU_LY.md): luồng video, ByteTrack, lấy mẫu, OCR, tổng hợp kết quả và chốt sự kiện.
-- [Hướng dẫn vận hành](HUONG_DAN_CHAY.md): lệnh cài đặt, chạy, sao lưu và xóa dữ liệu.
-
-## AI Box — bản thử nghiệm sự kiện
-
-- Tải video hoặc nhập URL RTSP/HTTP/HLS. Với URL trang web, chọn **Trang web (yt-dlp)**; chỉ các nền tảng được yt-dlp hỗ trợ và truy cập được mới hoạt động.
-- Giữ nguyên bộ model demo, sửa giải mã CCT theo vị trí ký tự để giữ số lặp.
-- Sự kiện được chốt sau 2 giây video mất dấu track hoặc cuối phiên, hiển thị ngay và lưu bền vững trong MariaDB.
-- Giao diện hiển thị/xuất tối đa 200 sự kiện gần nhất, gồm cả phiên trước. MariaDB giữ toàn bộ sự kiện.
-- Mặc định xử lý 60 giây nội dung mỗi nguồn; đặt 0 để xử lý đến hết nguồn. Đây là thời lượng nội dung, không phải thời gian thực thi. Stream liên tục không tự kết thúc.
-- Thời điểm xuất hiện/kết thúc là thời gian tương đối trong nguồn; `recorded_at` là thời điểm ghi sự kiện UTC.
-- Bản thử nghiệm chưa có vạch đếm, chống trùng giữa các track, webhook, reconnect hay nút dừng tác vụ nền. Xe không đọc được biển vẫn có sự kiện.
-- Nếu `.venv` được chép từ máy khác, hãy tạo môi trường mới bằng Python trên máy hiện tại.
-
-Ứng dụng Streamlit chạy trên máy của bạn. Chọn video, xem khung hình có hộp nhận diện trong lúc phân tích, xem bảng theo camera và tải CSV. Mỗi video giữ một bộ ByteTrack riêng. Một xe có thể tạo thêm track nếu bị che khuất lâu.
-
-Có thể nhập link stream ở ô **Hoặc nhập link stream**. YouTube được đọc qua pipeline `yt-dlp → FFmpeg`, không lưu thành file; RTSP/HTTP cũng được đọc qua FFmpeg. Cài `ffmpeg` và Node.js trong PATH để hỗ trợ các nguồn stream.
-
-## Chạy trên Windows (PowerShell)
-
-Dùng Python 3.12 và mở PowerShell trong thư mục chứa app.py.
+Python 3.12, PowerShell tại thư mục dự án:
 
 ```powershell
 py -3.12 -m venv .venv312
-.\.venv312\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv312\Scripts\python.exe -m pip install -e .
 .\.venv312\Scripts\python.exe -m streamlit run app.py
 ```
 
-Trên Linux/macOS, tạo môi trường bằng `python3.12 -m venv .venv312`, rồi thay đường dẫn Python trong hai lệnh cuối bằng `.venv312/bin/python`.
+- Nhận diện: http://localhost:8501.
+- Duyệt nhãn/ROI: chạy lệnh dưới rồi mở http://localhost:8502.
 
-Mở địa chỉ Streamlit in trên terminal, thường là http://localhost:8501. Thử với video ngắn của một làn trước. Khi dùng `yolo11n.pt` mặc định, Ultralytics tải trọng số nếu chưa có sẵn. Nếu chạy offline, đặt file trọng số trên máy rồi điền đường dẫn vào ô **Model loại xe**. Các nhãn loại xe dùng ID theo COCO.
+```powershell
+.\.venv312\Scripts\python.exe -m streamlit run review_app.py --server.port 8502
+.\.venv312\Scripts\python.exe -m vehicle_ai --help
+```
 
-## Bật logo và biển số
+Máy đã có môi trường thì bỏ bước tạo venv. Linux/macOS dùng `python3.12` và
+`.venv312/bin/python`. FFmpeg cần nằm trong PATH cho nguồn stream; yt-dlp/Node.js
+chỉ phục vụ nguồn trang web được hỗ trợ.
 
-- **Logo:** App mặc định dùng [models/logo.pt](./models/logo.pt). Tên nhãn trong trọng số được dùng làm tên hãng.
-- **Biển số Việt Nam:** Điền đường dẫn tới `DetectLisence_YOLO11.pt` trong repo [ddkhoa2605/LicensePlateDetection](https://github.com/ddkhoa2605/LicensePlateDetection), rồi chọn engine **CCT-VN ONNX** và cấu hình `cct_s_v1_vn.onnx` cùng `cct_s_v1_vn_plate_config.yaml`.
-- **PaddleOCR thay thế:** Chọn engine **PaddleOCR REC**, điền thư mục inference REC và tên model REC.
-- `models/logo.pt` hiện chứa trọng số thật; khi tải thêm model qua Git LFS, cần lấy blob thật thay vì file pointer.
-- Bộ model biển số Việt Nam đã được đóng gói trong thư mục `models/`: `DetectLisence_YOLO11.pt`, `cct_s_v1_vn.onnx` và `cct_s_v1_vn_plate_config.yaml`. App mặc định chọn CCT-VN ONNX.
-- PaddleOCR REC là lựa chọn bổ sung, cần cài riêng PaddleOCR/PaddlePaddle tương thích. Mặc định dùng CCT-VN ONNX. Model CRNN ONNX cần adapter riêng với đúng tiền xử lý và bảng ký tự.
-- Cột hãng hoặc biển số để trống khi thiếu model tương ứng hoặc không có kết quả đạt ngưỡng. OCR mẫu ưu tiên biển số có nhiều lần đọc trùng; hỗ trợ biển hai dòng phụ thuộc vào cách model REC được huấn luyện và chuẩn bị ảnh.
+## Model và dữ liệu
 
-## Phạm vi demo
+Tất cả trọng số nằm trong `models/`:
 
-Mỗi nguồn được xử lý như một camera, tuần tự. Bảng trả một dòng cho mỗi track đã chốt. Muốn ghép cùng một lượt xe giữa các camera cần dấu thời gian đồng bộ và sự kiện loop/radar hoặc quy tắc ghép theo vị trí làn. Demo có nguồn RTSP và SQLite cục bộ, chưa kết nối LaneApp.
+| File | Nhiệm vụ |
+|---|---|
+| `yolo11n.pt` | Phát hiện xe/loại xe — model gốc đang dùng |
+| `DetectLisence_YOLO11.pt` | Phát hiện biển số |
+| `cct_s_v1_vn.onnx` + YAML | OCR biển Việt Nam |
+| `logo.pt` | Nhận diện logo/hãng |
 
-## Cấu trúc mã nguồn
+`configs/baseline.yaml` là cấu hình mặc định. Bản fine-tune v001 đã được loại
+bỏ sau so sánh; giữ bộ nhãn đã duyệt và báo cáo trong `data/`, `runtime/`, `docs/`.
+CRNN riêng có công cụ train/export; chưa được chọn làm OCR mặc định.
 
-- `app.py`: giao diện Streamlit, chọn nguồn và xuất CSV.
-- `pipeline.py`: theo dõi xe, lấy mẫu nhận diện và chốt sự kiện.
-- `recognition.py`: adapter CCT-VN và chuẩn hóa kết quả OCR.
-- `sources.py`: nguồn video/FFmpeg/yt-dlp và quản lý tiến trình.
-- `events.py`: lưu và đọc sự kiện SQLite.
+## Cấu hình
+
+- Chép `.env.example` thành `.env` nếu chưa có; giữ `.env` riêng của máy.
+- SQLite mặc định tại `runtime/events.sqlite3`.
+- MariaDB: đặt `EVENT_STORE=mariadb` và điền `MARIADB_*`.
+- Ảnh bằng chứng: `runtime/images/`, đổi bằng `VDTC_IMAGE_ROOT`.
+- ROI vẽ tại UI duyệt nhãn, sau đó chọn file JSON ở UI nhận diện hoặc
+  truyền `--roi-file` cho CLI.
+
+Ví dụ baseline:
+
+```powershell
+.\.venv312\Scripts\python.exe -m vehicle_ai run `
+  --config configs/baseline.yaml --source data/raw/dataset1.mp4 `
+  --source-id dataset1 --camera CAM-01 --output runtime/runs/new-baseline
+```
+
+Output phải là thư mục mới. CLI lưu JSONL/ảnh độc lập với database của UI.
+
+## Cấu trúc
+
+```text
+app.py, review_app.py   Điểm vào giao diện
+src/vehicle_ai/        Core, UI, database và công cụ dữ liệu/train/evaluation
+configs/              Cấu hình pipeline và lớp nhãn
+models/               Trọng số và thông tin nguồn
+data/                 Video, ảnh, nhãn đã duyệt, ROI
+runtime/              Database, ảnh và kết quả chạy
+scripts/, tests/      Công cụ kiểm tra và kiểm thử
+docs/                 Hướng dẫn và báo cáo
+```
+
+Các checkout `third_party` và archive bên ngoài đã được xóa; thông tin nguồn
+vẫn được lưu trong [THIRD_PARTY.md](THIRD_PARTY.md). Chi tiết tổ chức code:
+[ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Docker CPU
+
+```powershell
+docker compose build
+docker compose --profile ui up -d ui
+```
+
+Model/config/data mount riêng; `.env` không đóng vào image.
+MariaDB trên Windows host dùng `host.docker.internal` khi truy cập từ Docker.
+
+## Kiểm tra
+
+```powershell
+.\.venv312\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv312\Scripts\python.exe -m ruff check .
+.\.venv312\Scripts\python.exe -m unittest discover -s tests -v
+node tests/roi_canvas.test.cjs
+```
+
+## Phạm vi hiện tại
+
+Mỗi nguồn có tracker riêng; mặc định chốt event sau 2 giây mất dấu hoặc cuối
+nguồn. Một xe có thể tạo nhiều track. ROI lọc theo tâm bbox, detector vẫn chạy
+toàn ảnh. Chưa triển khai trigger, webhook/outbox và đồng bộ thời gian camera.
+
+- Hướng dẫn dữ liệu/train: [PHAT_TRIEN_AI.md](docs/PHAT_TRIEN_AI.md).
+- Hướng dẫn gán nhãn: [DUYET_NHAN.md](docs/DUYET_NHAN.md).
+- Toàn bộ tài liệu: [docs/README.md](docs/README.md).

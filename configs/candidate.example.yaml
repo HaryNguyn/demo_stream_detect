@@ -1,0 +1,19 @@
+# Copy to candidate.yaml and point to your trained checkpoints.
+vehicle_weights: ../runtime/training/vehicle-001/fit/weights/best.pt
+logo_weights: ../models/logo.pt
+plate_weights: ../models/DetectLisence_YOLO11.pt
+# Keep CCT baseline initially. Switch to crnn only after comparing evaluation results.
+ocr_engine: cct
+ocr_weights: ../models/cct_s_v1_vn.onnx
+ocr_config: ../models/cct_s_v1_vn_plate_config.yaml
+model_version: candidate-001
+device: cpu
+# Must match the exact annotation taxonomy of the vehicle checkpoint.
+vehicle_classes:
+  0: Ô tô con
+  1: Xe máy
+  2: Xe buýt
+  3: Xe tải
+detector_confidence: 0.2
+sample_interval_seconds: 0.5
+track_timeout_seconds: 2.0

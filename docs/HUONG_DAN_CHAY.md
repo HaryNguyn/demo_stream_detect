@@ -31,6 +31,7 @@ Cài thư viện và chờ đến khi lệnh hoàn tất thành công:
 
 ```powershell
 .\.venv312\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv312\Scripts\python.exe -m pip install -e .
 ```
 
 Đọc URL stream cần FFmpeg trong `PATH`. Link trang web dùng `yt-dlp`;
@@ -72,26 +73,36 @@ Chờ ứng dụng dừng và PowerShell hiện lại dấu nhắc lệnh.
 
 ## 5. Dữ liệu được lưu ở đâu?
 
-Sự kiện được lưu trong MariaDB database `lane_demo`, bảng `events`.
+Sự kiện được lưu trong SQLite:
 
-Giao diện và CSV hiển thị/xuất tối đa 200 sự kiện gần nhất. MariaDB giữ
-toàn bộ sự kiện đã ghi.
+```text
+C:\Users\ADMIN\Downloads\lane_video_demo\lane_video_demo\runtime\events.sqlite3
+```
 
-Ứng dụng mặc định đọc cấu hình từ các biến môi trường `MARIADB_*`. Các giá trị
-Windows đã lưu cho tài khoản hiện tại cũng được ứng dụng đọc tự động.
+Database lưu lịch sử qua các lần chạy. Giao diện và CSV hiện hiển thị/xuất
+tối đa 200 sự kiện gần nhất; database giữ toàn bộ sự kiện đã ghi.
 
 Video tải lên được xử lý trong thư mục tạm và được dọn khi phiên xử lý kết thúc bình thường.
-Ảnh crop chẩn đoán hiện chỉ hiển thị trên giao diện, chưa được lưu thành ảnh bằng chứng.
+Ảnh xe/biển số được chọn và lưu tại `runtime/images`, kèm `metadata.json`.
+Biến `VDTC_IMAGE_ROOT` cho phép đổi thư mục. Xem [cấu hình MariaDB và bản merge](MERGE.md).
 
 ## 6. Xóa toàn bộ lịch sử sự kiện
 
 **Thao tác này xóa toàn bộ sự kiện đã lưu.** Dừng ứng dụng bằng `Ctrl+C` trước khi xóa.
 
 ```powershell
-& "C:\Program Files\MariaDB 12.3\bin\mariadb.exe" `
-  -u lane_app -p1234567 -h 127.0.0.1 -D lane_demo `
-  -e "DELETE FROM events;"
+cd C:\Users\ADMIN\Downloads\lane_video_demo\lane_video_demo
+Remove-Item -LiteralPath .\runtime\events.sqlite3 -ErrorAction SilentlyContinue
 ```
+
+Kiểm tra:
+
+```powershell
+Test-Path .\runtime\events.sqlite3
+```
+
+Kết quả `False` nghĩa là file đã được xóa hoặc chưa tồn tại.
+Nếu xuất hiện lỗi file đang được sử dụng, đóng các tiến trình ứng dụng/công cụ đang mở database rồi thử lại.
 
 Chạy lại:
 
@@ -99,7 +110,7 @@ Chạy lại:
 .\.venv312\Scripts\python.exe -m streamlit run app.py
 ```
 
-Refresh trang trình duyệt hoặc mở phiên mới để cập nhật bảng rỗng.
+Ứng dụng tự tạo database rỗng. Refresh trang trình duyệt hoặc mở phiên mới nếu còn thấy bảng cũ.
 Việc xóa database không xóa model, mã nguồn, video gốc hay CSV đã tải xuống.
 
 ## 7. Sao lưu trước khi xóa (tùy chọn)
@@ -107,9 +118,7 @@ Việc xóa database không xóa model, mã nguồn, video gốc hay CSV đã t�
 Dừng ứng dụng rồi chạy:
 
 ```powershell
-$backup = "events-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').sql"
-& "C:\Program Files\MariaDB 12.3\bin\mariadb-dump.exe" `
-  -u lane_app -p1234567 -h 127.0.0.1 lane_demo events > $backup
+Copy-Item -LiteralPath .\runtime\events.sqlite3 -Destination ".\runtime\events-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss').sqlite3"
 ```
 
 ## 8. Lỗi thường gặp
@@ -120,6 +129,9 @@ Cài thư viện vào đúng môi trường và đợi lệnh hoàn tất:
 
 ```powershell
 .\.venv312\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv312\Scripts\python.exe -m pip install -e .
+
+Remove-Item .\runtime\events.sqlite3
 ```
 
 ### `No suitable Python runtime found`
