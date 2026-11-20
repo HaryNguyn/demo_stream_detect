@@ -36,14 +36,19 @@ def render_model_settings(root):
             ),
         }
         st.subheader("OCR biển số")
-        options["ocr_engine"] = st.selectbox("Engine OCR", ["CCT-VN ONNX", "PaddleOCR REC"])
-        if options["ocr_engine"] == "PaddleOCR REC":
-            options["rec_dir"] = st.text_input("Thư mục PaddleOCR REC")
-            options["rec_name"] = st.text_input("Tên model PaddleOCR REC")
-        else:
+        options["ocr_choice"] = st.selectbox(
+            "Mô hình OCR",
+            ["CCT-VN ONNX", "OCR model Việt Nam ONNX"],
+        )
+        if options["ocr_choice"] == "CCT-VN ONNX":
             options["ocr_weights"] = st.text_input("Model CCT-VN ONNX", str(models / "cct_s_v1_vn.onnx"))
             options["ocr_config"] = st.text_input(
                 "Tệp cấu hình CCT-VN (.yaml)", str(models / "cct_s_v1_vn_plate_config.yaml")
+            )
+        else:
+            options["ocr_weights"] = st.text_input("Model OCR Việt Nam ONNX", str(models / "ocr_model.onnx"))
+            options["ocr_config"] = st.text_input(
+                "Tệp cấu hình OCR Việt Nam (.yaml)", str(models / "ocr_model.yaml")
             )
     return options
 
@@ -67,20 +72,10 @@ def prepare_models(options):
     if options["use_config"]:
         recognizer = load_recognizer(config)
     elif plate_model is not None:
-        if options["ocr_engine"] == "PaddleOCR REC":
-            rec_dir, rec_name = options["rec_dir"].strip(), options["rec_name"].strip()
-            if not rec_dir or not rec_name:
-                raise ValueError("Để dùng PaddleOCR, nhập đủ thư mục REC và tên model REC.")
-            if not Path(rec_dir).is_dir():
-                raise FileNotFoundError(rec_dir)
-            from paddleocr import TextRecognition
-
-            recognizer = TextRecognition(model_dir=rec_dir, model_name=rec_name)
-        else:
-            weights, config_path = options["ocr_weights"].strip(), options["ocr_config"].strip()
-            if not weights or not config_path:
-                raise ValueError("Để dùng CCT-VN ONNX, nhập đủ model ONNX và tệp YAML.")
-            recognizer = VietnamesePlateRecognizer(weights, config_path)
+        weights, config_path = options["ocr_weights"].strip(), options["ocr_config"].strip()
+        if not weights or not config_path:
+            raise ValueError("Để OCR, nhập đủ model ONNX và tệp YAML.")
+        recognizer = VietnamesePlateRecognizer(weights, config_path)
     return config, logo_model, plate_model, recognizer
 
 

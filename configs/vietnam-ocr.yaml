@@ -1,0 +1,17 @@
+# Paths are relative to this YAML file.
+vehicle_weights: ../models/yolo11n.pt
+logo_weights: ../models/logo.pt
+plate_weights: ../models/DetectLisence_YOLO11.pt
+ocr_engine: cct
+ocr_weights: ../models/ocr_model.onnx
+ocr_config: ../models/ocr_model.yaml
+model_version: vietnam-ocr-001
+device: cpu
+vehicle_classes:
+  2: Ô tô con
+  3: Xe máy
+  5: Xe buýt
+  7: Xe tải
+detector_confidence: 0.2
+sample_interval_seconds: 0.5
+track_timeout_seconds: 2.0
