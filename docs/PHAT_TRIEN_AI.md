@@ -118,6 +118,65 @@ Dataset YOLO được tạo dưới `output/dataset`; nhãn tên lớp gốc kh�
 
 Lệnh này dùng split test. mAP detector không thay thế đánh giá toàn bộ sự kiện.
 
+### Train logo cho thị trường Việt Nam
+
+Taxonomy mẫu trong `configs/classes_logo.example.yaml` gồm 16 class:
+
+- Bắt buộc: `vinfast`, `toyota`, `hyundai`, `kia`, `mazda`, `mitsubishi`,
+  `ford`, `honda`, `suzuki`.
+- Bổ sung: `mercedes`, `bmw`, `lexus`, `isuzu`, `peugeot`, `volvo`, `other`.
+- Mặc định gộp `opel`, `seat`, `skoda`, `dacia`, `citroen`, `fiat`,
+  `chevrolet`, `audi`, `renault`, `volkswagen` vào `other`. Có thể tách riêng
+  Chevrolet/Audi/Volkswagen nếu camera mục tiêu có đủ dữ liệu.
+
+**Đây là danh sách cho lần train mới.** Không đổi `model.names` của checkpoint
+cũ để thêm VinFast: model cần được học từ ảnh logo VinFast đã gán nhãn.
+ID nhãn YOLO là vị trí trong danh sách, bắt đầu từ 0; phải ánh xạ lại toàn bộ
+nhãn cũ theo tên hãng trước khi dùng taxonomy này. Giữ bản dataset gốc.
+
+Chuẩn bị dữ liệu:
+
+Remap nhãn cũ sang taxonomy mới bằng script sau; kiểm tra thứ tự class nguồn
+bằng `--old-classes` nếu khác danh sách mặc định 24 hãng:
+
+```powershell
+& $python scripts/remap_logo_labels.py `
+  --input data/logo_old/labels --output data/logo_v2/labels `
+  --new-classes configs/classes_logo.example.yaml `
+  --report runtime/evaluation/logo_remap_report --dry-run
+```
+
+Bỏ `--dry-run` để ghi nhãn và báo cáo JSON/CSV. Thư mục output phải chưa tồn tại.
+Dry-run không ghi bất kỳ file nào. Script chỉ remap nhãn detection (5 trường),
+giữ cây thư mục và nhãn rỗng; không sao chép ảnh hoặc tạo manifest.
+Nissan mặc định vào `other` kèm thông báo; dùng `--map nissan=<class>` để đổi.
+
+1. Gán bounding box quanh logo trong ảnh xe, phù hợp đầu vào crop xe của pipeline.
+   `other` chỉ dành cho logo hãng ngoài danh sách; logo mờ/không rõ hãng cần
+   duyệt lại, không tự gán thành `other`. Ảnh không có logo là ảnh âm với nhãn rỗng.
+2. Loại ảnh trùng/gần trùng; chia train/val/test theo xe, video hoặc phiên camera
+   trước khi cân bằng để tránh các frame cùng xe lọt sang nhiều split.
+3. Thống kê cả số ảnh và số logo mỗi hãng trong split train. Đặt giới hạn mẫu
+   mỗi hãng theo dữ liệu thực có, lấy mẫu đa dạng ngày/đêm, góc nhìn, khoảng cách
+   và camera. Bổ sung ảnh thật cho hãng ít mẫu; augmentation chỉ áp dụng train.
+   Không suy ra tỷ lệ dataset từ thị phần doanh số bán mới.
+4. Giữ test đại diện giao thông thực tế; có thêm tập đánh giá cân bằng theo hãng.
+   Theo dõi precision/recall/AP từng hãng và confusion matrix, nhất là VinFast
+   bị nhầm sang hãng khác hoặc các hãng khác bị đoán thành VinFast.
+   `other` cũng cần nhiều kiểu logo, không chỉ một hãng.
+
+```powershell
+& $python -m vehicle_ai train-detector `
+  --manifest data/logo/split.csv --classes configs/classes_logo.example.yaml `
+  --weights models/yolo11n.pt --epochs 50 --batch 8 --imgsz 640 --device cpu `
+  --output runtime/training/logo-vn-001
+```
+
+Sau khi đánh giá, chọn `runtime/training/logo-vn-001/fit/weights/best.pt`
+trong mục model logo trên web hoặc cấu hình `logo_weights` của pipeline.
+Danh sách class nhỏ hơn không làm giảm đáng kể dung lượng toàn bộ model;
+lợi ích chính là taxonomy phù hợp và chất lượng dữ liệu.
+
 ### OCR riêng
 
 CCT hiện có là model ONNX inference, không có training graph/checkpoint

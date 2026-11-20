@@ -8,7 +8,6 @@ from .capture import open_capture
 from .config import PipelineConfig
 from .inference import draw_recognition
 from .session import RecognitionSession
-from .roi import draw_roi
 
 
 def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=None,
@@ -46,7 +45,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                 break
             publish(session.feed(frame, index / fps))
             if on_frame and index % 10 == 0:
-                on_frame(index + 1, total, draw_roi(draw_recognition(session.last_result, session.tracks, config.roi), config.roi))
+                on_frame(index + 1, total, draw_recognition(session.last_result, session.tracks, config.roi))
             if on_diagnostic and index % 10 == 0:
                 on_diagnostic(session.diagnostics.copy())
             index += 1

@@ -7,7 +7,7 @@ import numpy as np
 from ultralytics import YOLO
 
 from .ocr import inspect_plate
-from .roi import center_in_roi
+from .roi import center_in_roi, draw_roi
 
 
 def encode_crop(image):
@@ -104,25 +104,83 @@ def recognize_vehicle(
 
 
 def draw_recognition(result, tracks, roi=None):
+    image = draw_roi(result.orig_img.copy(), roi)
     boxes = result.boxes
     if boxes is None or boxes.id is None:
-        return result.orig_img.copy()
+        return image
     mask = [center_in_roi(box.xyxy[0].tolist(), result.orig_img.shape, roi)
             for box in boxes]
     result = result[mask]
     boxes = result.boxes
-    image = result.plot()
-    for box, track_id in zip(boxes, boxes.id.int().tolist()):
+    font, scale = cv2.FONT_HERSHEY_SIMPLEX, 0.45
+    height, width = image.shape[:2]
+    placed, captions, overflow = [], [], []
+    labels = []
+    for box, track_id in sorted(zip(boxes, boxes.id.int().tolist()), key=lambda item: item[1]):
+        color = ((37 * track_id) % 156 + 100, (67 * track_id) % 156 + 100,
+                 (97 * track_id) % 156 + 100)
+        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+        cv2.rectangle(image, (x1, y1), (x2, y2), color, 1, cv2.LINE_AA)
+        lines = []
         vehicle = tracks.get(track_id)
-        if vehicle is None:
+        if vehicle is not None:
+            plate = max(vehicle.plates, key=vehicle.plate_rank) if vehicle.plates else "OCR: --"
+            lines.append(plate)
+        lines.append(f"{result.names[int(box.cls.item())]} #{track_id}")
+        if vehicle is not None and vehicle.brand:
+            lines.append(vehicle.brand)
+        labels.append((lines, color, x1, y1, y2))
+
+    # Reserve the whole multiline caption, including the black text outline.
+    for lines, color, x1, y1, y2 in labels:
+        scale = min(0.5, max(1, width - 10) /
+                    max(1, max(cv2.getTextSize(line, font, 1.0, 3)[0][0] for line in lines)))
+        sizes = [cv2.getTextSize(line, font, scale, 3) for line in lines]
+        text_width = max(size[0][0] for size in sizes)
+        text_height = max(size[0][1] for size in sizes)
+        line_height = text_height + max(size[1] for size in sizes) + 4
+        label_width, label_height = text_width + 10, line_height * len(lines) + 8
+        x = max(0, min(x1, width - label_width))
+        candidates = [y1 + 3, y1 - label_height - 3, y2 + 3]
+        candidates.extend(sorted(range(0, height - label_height + 1, label_height + 3),
+                                 key=lambda y: abs(y - y1)))
+        position = None
+        for y in candidates:
+            if label_width > width or y < 0 or y + label_height > height:
+                continue
+            rect = (x, y, x + label_width, y + label_height)
+            if all(rect[2] + 3 <= a or c + 3 <= rect[0] or
+                   rect[3] + 3 <= b or d + 3 <= rect[1] for a, b, c, d in placed):
+                position = rect
+                break
+        if position is None:
+            overflow.append((lines, color, label_width, label_height, text_height, scale, line_height))
             continue
-        plate = max(vehicle.plates, key=vehicle.plate_rank) if vehicle.plates else "OCR: --"
-        label = f"{plate} {vehicle.brand}".strip()
-        x1, _, _, y2 = map(int, box.xyxy[0].tolist())
-        cv2.putText(
-            image, label, (max(0, x1), max(20, min(image.shape[0] - 8, y2))),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2,
-        )
+        placed.append(position)
+        captions.append((position, lines, color, text_height, scale, line_height))
+        left, top, right, bottom = position
+        if top != y1 + 3:
+            cv2.line(image, (max(0, min(x1, width - 1)), max(0, min(y1, height - 1))),
+                     (left, top + label_height // 2), color, 1, cv2.LINE_AA)
+        # Draw labels after all connectors so lines cannot cross their text.
+    for (left, top, right, bottom), lines, color, text_height, scale, line_height in captions:
+        for index, line in enumerate(lines):
+            origin = (left + 5, top + 4 + text_height + index * line_height)
+            cv2.putText(image, line, origin, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
+            cv2.putText(image, line, origin, font, scale, color, 1, cv2.LINE_AA)
+    # Dense scenes retain all information in separate rows below the original frame.
+    if overflow:
+        extra_height = sum(item[3] + 3 for item in overflow)
+        extra_width = max(0, max(item[2] for item in overflow) - width)
+        image = cv2.copyMakeBorder(image, 0, extra_height, 0, extra_width,
+                                   cv2.BORDER_CONSTANT, value=(25, 25, 25))
+        top = height
+        for lines, color, _, label_height, text_height, scale, line_height in overflow:
+            for index, line in enumerate(lines):
+                origin = (5, top + 4 + text_height + index * line_height)
+                cv2.putText(image, line, origin, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
+                cv2.putText(image, line, origin, font, scale, color, 1, cv2.LINE_AA)
+            top += label_height + 3
     return image
 
 

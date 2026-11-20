@@ -1,5 +1,19 @@
-# Replace with your actual annotation taxonomy before training.
+# Vietnam logo taxonomy for NEW training datasets (class IDs follow this order).
+# Remap existing annotations before use; this does not change models/logo.pt.
 names:
-  - Toyota
-  - Honda
-  - Ford
+  - vinfast
+  - toyota
+  - hyundai
+  - kia
+  - mazda
+  - mitsubishi
+  - ford
+  - honda
+  - suzuki
+  - mercedes
+  - bmw
+  - lexus
+  - isuzu
+  - peugeot
+  - volvo
+  - other
