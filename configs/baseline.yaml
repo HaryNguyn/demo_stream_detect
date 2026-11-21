@@ -5,7 +5,7 @@ plate_weights: ../models/DetectLisence_YOLO11.pt
 ocr_engine: cct
 ocr_weights: ../models/cct_s_v1_vn.onnx
 ocr_config: ../models/cct_s_v1_vn_plate_config.yaml
-model_version: baseline-001
+model_version: baseline-logo26-001
 device: cpu
 vehicle_classes:
   2: Ô tô con

@@ -10,4 +10,5 @@ def load_recognizer(config):
         return CRNNRecognizer(config.ocr_weights, device=config.device)
     from .ocr import VietnamesePlateRecognizer
 
-    return VietnamesePlateRecognizer(config.ocr_weights, config.ocr_config)
+    return VietnamesePlateRecognizer(config.ocr_weights, config.ocr_config,
+                                     threads=config.ocr_threads, batch_size=config.ocr_batch_size)

@@ -1,6 +1,5 @@
-"""Application boundaries: settings, evidence persistence and Streamlit entry points."""
+"""Application boundaries: settings, evidence persistence and web/review entry points."""
 import base64
-import csv
 import json
 import os
 from pathlib import Path
@@ -10,13 +9,10 @@ from unittest.mock import patch
 
 import cv2
 import numpy as np
-from streamlit.testing.v1 import AppTest
 
 from vehicle_ai.evidence import save_event_images
-from vehicle_ai.persistence import SQLiteEventStore
+from event_store_stub import EventStoreStub
 from vehicle_ai.settings import get_setting
-
-ROOT = Path(__file__).resolve().parents[1]
 
 
 class SettingsTests(unittest.TestCase):
@@ -33,10 +29,10 @@ class SettingsTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
-    def test_sqlite_and_evidence_roundtrip_without_mutating_input(self):
+    def test_evidence_roundtrip_without_mutating_input(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            store = SQLiteEventStore(root / "events.sqlite3")
+            store = EventStoreStub()
             image = np.zeros((12, 24, 3), np.uint8)
             ok, encoded = cv2.imencode(".jpg", image)
             self.assertTrue(ok)
@@ -55,39 +51,20 @@ class EvidenceTests(unittest.TestCase):
 
 
 class UITests(unittest.TestCase):
-    def test_detection_entrypoint_reruns_with_temporary_database(self):
-        with tempfile.TemporaryDirectory() as temp:
-            store = SQLiteEventStore(Path(temp) / "events.sqlite3")
-            with patch("vehicle_ai.ui.detection.create_event_store", return_value=store):
-                app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=60)
-                self.assertFalse(app.exception)
-                app.checkbox[0].check().run()
-                self.assertFalse(app.exception)
-                self.assertTrue(app.button[0].disabled)
+    def test_detection_entrypoint_uses_web_server(self):
+        import app
 
-    def test_review_entrypoint_approves_only_temporary_record(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            directory = root / "data/review/vehicle-v001"
-            directory.mkdir(parents=True)
-            image_path = root / "sample.jpg"
-            cv2.imwrite(str(image_path), np.zeros((64, 128, 3), np.uint8))
-            boxes = [{"class_id": 0, "x_center": .5, "y_center": .5, "width": .5, "height": .5}]
-            project = {
-                "generation_status": "completed",
-                "records": [{"id": "sample", "image": str(image_path), "group_id": "video",
-                             "status": "pending", "suggested_boxes": boxes}],
-            }
-            (directory / "review.json").write_text(json.dumps(project), encoding="utf-8")
-            with patch("vehicle_ai.ui.review.project_dir", return_value=root):
-                app = AppTest.from_file(str(ROOT / "review_app.py")).run(timeout=60)
-                self.assertFalse(app.exception)
-                app.button[0].click().run()
-                self.assertFalse(app.exception)
-            with (directory / "reviewed_manifest.csv").open(encoding="utf-8") as stream:
-                approved = list(csv.DictReader(stream))
-            self.assertEqual(len(approved), 1)
-            self.assertEqual(approved[0]["group_id"], "video")
+        store = EventStoreStub()
+        web = app.create_app(store)
+        with web.test_client() as client:
+            with client.get("/") as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'/static/app.js', response.data)
+            self.assertEqual(client.get("/api/status").json["status"], "idle")
+        with patch("app.create_app", return_value=web), patch.object(web, "run") as run:
+            with patch("sys.argv", ["app.py", "--port", "8002"]):
+                app.main()
+            run.assert_called_once_with(host="127.0.0.1", port=8002, threaded=True)
 
 
 if __name__ == "__main__":

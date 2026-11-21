@@ -17,5 +17,5 @@ RUN useradd --create-home --uid 10001 vehicle \
     && mkdir -p /app/runtime /app/models /app/data \
     && chown -R vehicle:vehicle /app/runtime
 USER vehicle
-EXPOSE 8501
+EXPOSE 8000
 CMD ["python", "-m", "vehicle_ai", "--help"]

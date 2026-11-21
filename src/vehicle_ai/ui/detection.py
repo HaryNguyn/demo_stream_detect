@@ -17,6 +17,7 @@ from ..persistence import create_event_store
 from ..pipeline import analyze_video
 from ..roi import validate_roi
 from ..settings import image_root, project_dir
+from .vehicle_cards import render_vehicle_cards
 
 
 def render_model_settings(root):
@@ -116,7 +117,8 @@ def analyze_source(source, camera, temporary_dir, index, models, store, event_pr
             store.update_images(event["event_id"], saved)
         except OSError as error:
             st.warning(f"Không lưu được ảnh sang {images}: {error}")
-        event_preview.dataframe(store.recent(), hide_index=True, width="stretch")
+        with event_preview.container():
+            render_vehicle_cards(store.recent())
 
     def show_diagnostic(info):
         diagnostic_status.write(
@@ -159,9 +161,11 @@ def main():
         "Thử nghiệm: mặc định chốt sự kiện sau 2 giây mất dấu xe hoặc khi kết thúc phiên. "
         "Mỗi track là một lượt quan sát; xe bị mất dấu lâu có thể tạo sự kiện mới."
     )
-    event_preview = st.empty()
-    event_preview.dataframe(store.recent(), hide_index=True, width="stretch")
-    if st.button("Phân tích video", type="primary", disabled=not videos and not stream_url.strip()):
+    start = st.button("Phân tích video", type="primary", disabled=not videos and not stream_url.strip())
+    video_column, results_column = st.columns([1.35, 1], gap="large")
+    with results_column:
+        event_preview = st.empty()
+    if start:
         st.session_state.pop("rows", None)
         try:
             models = prepare_models(options)
@@ -170,13 +174,19 @@ def main():
                 inputs.append(stream_source(stream_url, webpage=source_mode == "Trang web (yt-dlp)"))
             with TemporaryDirectory() as temporary_dir:
                 for index, (name, source) in enumerate(inputs, 1):
-                    analyze_source(
-                        source, f"{index} · {name}", temporary_dir, index,
-                        models, store, event_preview, max_seconds,
-                    )
+                    with video_column:
+                        analyze_source(
+                            source, f"{index} · {name}", temporary_dir, index,
+                            models, store, event_preview, max_seconds,
+                        )
             st.session_state.rows = store.recent()
         except Exception as error:
             st.error(f"Phân tích bị gián đoạn. {type(error).__name__}: {error}")
+    else:
+        with video_column:
+            st.info("Chọn video hoặc nhập URL, sau đó nhấn Phân tích video.")
+    with event_preview.container():
+        render_vehicle_cards(store.recent(), interactive=True)
     if "rows" in st.session_state:
         st.subheader("Kết quả theo camera")
         rows = st.session_state.rows

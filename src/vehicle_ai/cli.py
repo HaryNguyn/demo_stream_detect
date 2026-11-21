@@ -31,7 +31,8 @@ def run_experiment(args):
     from .datasets import sha256
     from .inference import optional_yolo
     from .pipeline import analyze_video
-    from .storage import ExperimentWriter
+    from .storage import ExperimentWriter, MergedExperimentStore
+    from .result_filter import EvidenceRecorder
 
     config = load_config(args.config)
     if args.roi_file:
@@ -54,18 +55,36 @@ def run_experiment(args):
         "source_sha256": sha256(source) if source.is_file() else None,
         "camera_id": args.camera, "max_seconds": args.max_seconds,
         "status": "running",
+        "realtime": getattr(args, "realtime", False),
     }
     writer = ExperimentWriter(args.output)
+    merged = MergedExperimentStore(writer.directory, args.source_id, config.model_version)
+    recorder = EvidenceRecorder(
+        merged, writer.directory / "merged-evidence", config=config,
+        min_quality=config.min_image_quality, min_detection=config.min_evidence_detection,
+        min_ocr=config.min_evidence_ocr, top_k=config.evidence_top_k,
+        keep_low_confidence=config.keep_low_confidence,
+    )
+
+    def event_ready(row):
+        writer.append(row)
+        recorder.record(row)
+
     manifest = writer.directory / "run.json"
     manifest.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     started = time.perf_counter()
     try:
+        logo = optional_yolo(config.logo_weights)
+        metadata["brand_classes"] = list(logo.names.values()) if logo is not None else []
+        metadata["vehicle_classes"] = config.vehicle_classes
+        manifest.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
         analyze_video(
             args.source, args.camera, config.vehicle_weights,
-            optional_yolo(config.logo_weights), optional_yolo(config.plate_weights),
-            load_recognizer(config), on_event=writer.append, max_seconds=args.max_seconds,
+            logo, optional_yolo(config.plate_weights),
+            load_recognizer(config), on_event=event_ready, max_seconds=args.max_seconds,
             collect_results=False, config=config, source_id=args.source_id,
             on_stats=lambda stats: metadata.update(stats),
+            realtime=getattr(args, "realtime", False),
         )
         metadata["status"] = "completed"
     except Exception as error:
@@ -74,8 +93,11 @@ def run_experiment(args):
         raise
     finally:
         writer.close()
+        merged.close()
         metadata["elapsed_seconds"] = time.perf_counter() - started
         metadata["events"] = writer.count
+        metadata["merged_events"] = len(merged.rows)
+        metadata["event_files"] = {"raw": "events.jsonl", "merged": "events.merged.jsonl"}
         metadata["throughput_fps_including_load"] = metadata.get("frames", 0) / metadata["elapsed_seconds"]
         manifest.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"output": str(writer.directory), **metadata}
@@ -91,6 +113,7 @@ def build_parser():
     run.add_argument("--source-id", required=True, help="Stable ID also used in ground truth.")
     run.add_argument("--camera", default="CAM-01")
     run.add_argument("--max-seconds", type=float, default=0)
+    run.add_argument("--realtime", action="store_true", help="Use latest-frame skipping, like the web pipeline.")
     run.add_argument("--output", required=True, help="New directory; existing results are never overwritten.")
     extract = sub.add_parser("extract")
     extract.add_argument("--video", required=True)
@@ -128,6 +151,8 @@ def build_parser():
     evaluate = sub.add_parser("evaluate-events")
     evaluate.add_argument("--truth", required=True)
     evaluate.add_argument("--predictions", required=True)
+    evaluate.add_argument("--baseline", help="Previous predictions on the same ground truth; report after-minus-before deltas.")
+    evaluate.add_argument("--brand-classes", help="Actual model names YAML; otherwise read brand_classes from adjacent run.json.")
     evaluate.add_argument("--iou", type=float, default=0.3)
     evaluate.add_argument("--output", required=True)
     ocr = sub.add_parser("evaluate-ocr")
@@ -180,8 +205,21 @@ def main(argv=None):
                 raise ValueError("Cấu hình chưa bật OCR.")
             result = training.evaluate_ocr(args.manifest, recognizer, args.split)
     elif args.command == "evaluate-events":
-        from .evaluation import evaluate_events, read_events
-        result = evaluate_events(read_events(args.truth), read_events(args.predictions), args.iou)
+        from .evaluation import compare_reports, evaluate_events, read_events
+        truth = read_events(args.truth)
+        def brand_classes(predictions):
+            if args.brand_classes:
+                return names_from(args.brand_classes)
+            manifest = Path(predictions).parent / "run.json"
+            return json.loads(manifest.read_text(encoding="utf-8")).get("brand_classes") if manifest.is_file() else None
+
+        result = evaluate_events(truth, read_events(args.predictions), args.iou,
+                                 known_brands=brand_classes(args.predictions))
+        if args.baseline:
+            baseline = evaluate_events(truth, read_events(args.baseline), args.iou,
+                                       known_brands=brand_classes(args.baseline))
+            result["delta_from_baseline"] = compare_reports(baseline, result)
+            result["baseline"] = baseline
     elif args.command == "evaluate-detector":
         from ultralytics import YOLO
         output = Path(args.output).resolve()

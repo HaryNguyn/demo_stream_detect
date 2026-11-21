@@ -32,7 +32,7 @@ flowchart TD
     G --> K
     J --> K
     K --> L{Track quá hạn hoặc hết phiên?}
-    L -- Có --> M[Chốt sự kiện và ghi SQLite]
+    L -- Có --> M[Chốt sự kiện và ghi MariaDB]
     L -- Không --> B
     M --> B
 ```
@@ -300,7 +300,7 @@ Sự kiện không có biển vẫn được ghi với `Biển số: ""`.
 Hiện không có trạng thái sự kiện `ACCEPT/UNREAD/LOW_QUALITY` như dự án VN-ANPR.
 
 `on_event(row)` được gọi đồng bộ, sau đó track bị loại khỏi bộ nhớ quản lý.
-UI dùng `collect_results=False` vì sự kiện đã ghi vào SQLite;
+UI dùng `collect_results=False` vì sự kiện đã ghi vào MariaDB;
 hàm vẫn hỗ trợ trả danh sách khi `collect_results=True`.
 
 ## 12. Thời gian, hiển thị và chẩn đoán

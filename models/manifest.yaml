@@ -1,6 +1,6 @@
 version: 1
 baseline:
-  version: baseline-001
+  version: baseline-logo26-001
   upstream_code: https://github.com/HaryNguyn/demo_stream_detect
   upstream_commit: e7a5231
   vehicle:
@@ -16,7 +16,8 @@ baseline:
     decoder: character_slots
   logo:
     path: logo.pt
-    provenance: Bundled in upstream demo; verify exact training dataset/license before redistribution.
+    provenance: '26-class detector retrained from the original 24-class logo.pt by merging logo_24_hang.zip and logo_xe_yolo_dot1.zip; adds vinfast and isuzu, keeps class IDs 0-23, has no other class. Source checkpoint: C:/Users/ADMIN/Downloads/best.pt.'
+    sha256_prefix: D89A084706EE8CD9
   note: SHA-256 of actual model files is recorded automatically in each experiment run.json.
 candidate:
-  note: vehicle-reviewed-v001 was trained and evaluated, then its weights were removed. The original baseline remains active.
+  note: vehicle-reviewed-v001 was trained and evaluated, then its weights were removed. The vehicle model is unchanged; only the logo detector was replaced on 2026-11-22.

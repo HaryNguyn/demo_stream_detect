@@ -66,7 +66,7 @@ runtime/runs/baseline-001/
 ```
 
 Thư mục output phải mới để không ghi đè kết quả cũ. Run CLI không ghi vào
-MariaDB/SQLite đang dùng bởi giao diện. `run.json` ghi trạng thái failed nếu
+MariaDB đang dùng bởi giao diện. `run.json` ghi trạng thái failed nếu
 inference lỗi; file JSONL có thể chứa phần kết quả đã hoàn tất.
 
 Package:
@@ -88,7 +88,7 @@ Package:
 
 `app.py` và `review_app.py` là entry point mỏng, gọi `vehicle_ai.ui`.
 Database nằm trong `vehicle_ai.persistence`; các file compatibility ở root
-đã được loại bỏ. Schema SQLite/MariaDB vẫn tương thích dữ liệu cũ.
+đã được loại bỏ. Schema MariaDB vẫn tương thích dữ liệu cũ.
 Xem [ARCHITECTURE.md](ARCHITECTURE.md) cho cấu trúc hiện tại.
 
 ## 3. Train và export
@@ -277,7 +277,7 @@ UI đọc `.env`; nếu MariaDB chạy trên Windows host thì cấu hình host 
 & $python -m unittest discover -s tests -v
 ```
 
-Các kiểm thử bao gồm vòng đời phiên, ảnh bằng chứng, tương thích SQLite,
+Các kiểm thử bao gồm vòng đời phiên, ảnh bằng chứng, lưu sự kiện MariaDB,
 chống rò rỉ dataset, đánh giá một-một và train CRNN 1 epoch trên dữ liệu tổng hợp.
 Test tổng hợp chỉ xác nhận đường chạy, không chứng minh chất lượng nhận diện.
 

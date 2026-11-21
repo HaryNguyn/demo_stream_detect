@@ -11,6 +11,7 @@ dynamic = ["dependencies"]
 
 [project.optional-dependencies]
 dev = ["ruff>=0.8,<1"]
+review = ["streamlit>=1.49,<2"]
 
 [project.scripts]
 vehicle-ai = "vehicle_ai.cli:main"
@@ -19,7 +20,7 @@ vehicle-ai = "vehicle_ai.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-vehicle_ai = ["roi_component/*.html"]
+vehicle_ai = ["roi_component/*.html", "web_static/*"]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}

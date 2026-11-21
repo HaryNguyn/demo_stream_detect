@@ -1,10 +1,7 @@
 import io
 import json
 import os
-import sqlite3
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from vehicle_ai import capture as sources
@@ -13,35 +10,33 @@ from vehicle_ai.persistence import create_event_store, MariaDBEventStore
 
 
 class StorageTests(unittest.TestCase):
-    def test_existing_sqlite_history_and_new_images(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "events.sqlite3"
-            with sqlite3.connect(path) as db:
-                db.execute("CREATE TABLE events (event_id TEXT PRIMARY KEY, recorded_at TEXT, payload TEXT)")
-                db.execute("INSERT INTO events VALUES (?, ?, ?)",
-                           ("old", "2025", json.dumps({"event_id": "old", "Camera": "cũ"})))
-            db.close()
-            store = create_event_store(path)
-            event = store.append({
-                "Camera": "Mới", "Track ID": 12, "Biển số": "30A12345",
-                "Danh sách ảnh xe": [{"data": "BASE64_SENTINEL"}],
-            })
-            saved = {"detected": [{"path": "vehicle.jpg"}], "plate": []}
-            store.update_images(event["event_id"], saved)
-            reopened = create_event_store(path)
-            rows = reopened.recent()
-            self.assertEqual(len(rows), 2)
-            self.assertEqual(rows[0]["images"], saved)
-            self.assertEqual(rows[0]["Xe ID"], "30A12345")
-            self.assertEqual(rows[1]["event_id"], "old")
-            self.assertNotIn("BASE64_SENTINEL", json.dumps(rows))
-            self.assertEqual(len(reopened.recent(1)), 1)
-            self.assertIn("Danh sách ảnh xe", event)
+    def test_mariadb_writes_metadata_and_image_paths(self):
+        connection = MagicMock()
+        cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
+        with patch.dict(os.environ, {"MARIADB_USER": "test", "MARIADB_PASSWORD": "test"}):
+            with patch.object(MariaDBEventStore, "connect", return_value=connection):
+                store = MariaDBEventStore()
+                cursor.execute.reset_mock()
+                row = {"Camera": "Mới", "Track ID": 12, "Biển số": "30A12345",
+                       "Danh sách ảnh xe": [{"data": "BASE64_SENTINEL"}]}
+                event = store.append(row)
+                sql, values = cursor.execute.call_args.args
+                self.assertIn("INSERT INTO events", sql)
+                self.assertEqual(values[3], "30A12345")
+                self.assertNotIn("BASE64_SENTINEL", str(values))
+                self.assertIn("Danh sách ảnh xe", event)
+                self.assertNotIn("event_id", row)
+                saved = {"detected": [{"path": "vehicle.jpg"}], "plate": []}
+                store.update_images(event["event_id"], saved)
+                sql, values = cursor.execute.call_args.args
+                self.assertIn("UPDATE events", sql)
+                self.assertEqual(json.loads(values[0]), saved)
+                self.assertEqual(values[1], event["event_id"])
 
-    def test_invalid_backend(self):
-        with patch.dict(os.environ, {"EVENT_STORE": "invalid"}):
-            with self.assertRaises(ValueError):
-                create_event_store()
+    def test_factory_always_uses_mariadb(self):
+        with patch("vehicle_ai.persistence.MariaDBEventStore") as store:
+            self.assertIs(create_event_store(), store.return_value)
+            store.assert_called_once_with()
 
     def test_mariadb_creates_schema_and_missing_identity_column(self):
         connection = MagicMock()

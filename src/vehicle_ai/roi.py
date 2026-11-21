@@ -67,3 +67,17 @@ def draw_roi(image, points):
     pixels = np.rint(np.asarray(points) * [width - 1, height - 1]).astype(np.int32)
     cv2.polylines(image, [pixels], True, (0, 215, 255), 3)
     return image
+
+
+def crop_detector_roi(frame, points, padding=0.05):
+    """Crop polygon bounding rectangle; retain center filtering after detection."""
+    if not points:
+        return frame, (0, 0)
+    height, width = frame.shape[:2]
+    polygon = np.asarray(points) * [width, height]
+    left, top = polygon.min(axis=0)
+    right, bottom = polygon.max(axis=0)
+    dx, dy = (right - left) * padding, (bottom - top) * padding
+    x1, y1 = max(0, math.floor(left - dx)), max(0, math.floor(top - dy))
+    x2, y2 = min(width, math.ceil(right + dx)), min(height, math.ceil(bottom + dy))
+    return frame[y1:max(y1 + 1, y2), x1:max(x1 + 1, x2)], (x1, y1)

@@ -89,7 +89,7 @@ Server xác nhận đã lưu
 - Server đã nhận nhưng Box chưa nhận phản hồi: gửi lại cùng event_id.
 - Server dùng ràng buộc unique để không tạo bản ghi trùng.
 - Không để thời gian gọi API làm đứng luồng camera.
-Với Box độc lập, SQLite thường đủ cho lưu đệm sự kiện/outbox. MariaDB có thể đặt ở hệ thống trung tâm; không bắt buộc cài MariaDB trên mỗi Box.
+Ứng dụng dùng MariaDB để lưu sự kiện. MariaDB có thể chạy cùng máy hoặc ở hệ thống trung tâm; cấu hình kết nối bằng các biến `MARIADB_*`.
 5. “Ghi hình” cần tách khỏi “nhận diện”
 Nếu chỉ cần bằng chứng lượt xe:
 - Lưu ảnh toàn cảnh, ảnh xe, ảnh biển.
@@ -109,5 +109,5 @@ AI Box — Docker Compose
 Volumes:
 ├── models/         # Read-only
 ├── config/
-└── runtime/        # SQLite, ảnh, hàng đợi
+└── runtime/        # Ảnh, kết quả chạy và hàng đợi
 UI test có thể chạy thêm khi cần. Không cần container riêng cho từng model.

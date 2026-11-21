@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vehicle AI · Nhận diện xe</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+<header><span class="logo">VA</span><div><h1>Vehicle AI</h1><p>Nhận diện phương tiện & biển số · Local workspace</p></div><span class="badge">LOCAL</span></header>
+<main>
+  <form id="source" class="panel controls">
+    <label>Video (có thể chọn nhiều)<input name="video" type="file" accept=".mp4,.avi,.mov,.mkv" multiple></label>
+    <label>Hoặc URL stream<input name="url" placeholder="https://… hoặc rtsp://…"></label>
+    <label>Loại URL<select name="source_mode"><option value="auto">Tự động / luồng trực tiếp</option><option value="webpage">Trang web (yt-dlp)</option></select></label>
+    <label>Giới hạn (giây, 0 = hết video)<input name="max_seconds" type="number" min="0" value="60" required></label>
+    <label>Hiển thị nhận diện<select name="overlay_style"><option value="anpr">ANPR · Khung biển số (như demo)</option><option value="vehicle">Khung toàn xe + thông tin</option></select></label>
+    <button id="start" type="submit">▶ Phân tích video</button>
+    <button id="stop" type="button" disabled>■ Stop</button>
+    <details class="model-settings">
+      <summary>Cấu hình model nhận diện / OCR / ROI</summary>
+      <div class="settings-grid">
+        <label>Chế độ cấu hình<select id="mode" name="mode"><option value="manual">Chọn model thủ công</option><option value="yaml">Pipeline YAML</option></select></label>
+        <label>ROI JSON (tùy chọn)<input name="roi_path" placeholder="data/roi/camera.json"></label>
+      </div>
+      <div id="yaml-settings" class="settings-grid" hidden>
+        <label>Pipeline YAML<input name="config" value="configs/vietnam-ocr.yaml"></label>
+      </div>
+      <div id="manual-settings" class="settings-grid">
+        <label>Model loại xe<input name="vehicle_weights" value="models/yolo11n.pt"></label>
+        <label>Model logo / hãng<input name="logo_weights" value="models/logo.pt"></label>
+        <label>Model phát hiện biển số<input name="plate_weights" value="models/DetectLisence_YOLO11.pt"></label>
+        <label>Mô hình OCR<select id="ocr-choice"><option value="cct">CCT-VN ONNX</option><option value="vn">OCR model Việt Nam ONNX</option></select></label>
+        <label>Model OCR ONNX<input name="ocr_weights" value="models/cct_s_v1_vn.onnx"></label>
+        <label>Cấu hình OCR YAML<input name="ocr_config" value="models/cct_s_v1_vn_plate_config.yaml"></label>
+        <label>Kích thước đầu vào detector xe<input name="detector_imgsz" type="number" min="32" step="32" value="640"></label>
+        <label>Số xe đọc biển tối đa / frame AI<input name="max_recognitions_per_frame" type="number" min="1" value="2"></label>
+        <label>Chiều rộng xe tối thiểu (px)<input name="min_vehicle_width" type="number" min="0" value="120"></label>
+        <label>Tổng điểm OCR để chốt biển<input name="plate_confirm_score" type="number" min="0.1" step="0.1" value="3.0"></label>
+        <label>Kích thước đầu vào detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="320"></label>
+        <label>Phần dưới xe tìm biển (1 = toàn xe)<input name="plate_lower_fraction" type="number" min="0.1" max="1" step="0.05" value="1"></label>
+        <label>Số luồng CPU cho OCR<input name="ocr_threads" type="number" min="1" value="4"></label>
+        <label>Số biển tối đa / batch OCR<input name="ocr_batch_size" type="number" min="1" value="8"></label>
+        <label>Điểm chất lượng ảnh tối thiểu (0–1)<input name="min_image_quality" type="number" min="0" max="1" step="0.05" value="0.5"></label>
+        <label>Độ tin cậy phát hiện tối thiểu (0–1)<input name="min_evidence_detection" type="number" min="0" max="1" step="0.05" value="0.6"></label>
+        <label>Độ tin cậy OCR ảnh lưu tối thiểu (0–1)<input name="min_evidence_ocr" type="number" min="0" max="1" step="0.05" value="0.85"></label>
+        <label>Số ảnh tốt nhất mỗi loại / track<input name="evidence_top_k" type="number" min="3" max="5" value="5"></label>
+        <label>Cách biệt tổng phiếu OCR để chốt<input name="plate_confirm_margin" type="number" min="0" step="0.1" value="1"></label>
+        <label>Xe chưa đủ tin cậy<select name="keep_low_confidence"><option value="true">Giữ ảnh tốt nhất + nhãn tin cậy thấp</option><option value="false">Chỉ lưu xe đã xác nhận</option></select></label>
+      </div>
+    </details>
+  </form>
+  <p id="error" role="alert"></p>
+  <div class="workspace">
+    <section class="panel viewer">
+      <div class="section-title"><h2>Video phân tích</h2><span id="status" class="badge">Sẵn sàng</span></div>
+      <p id="camera">Chọn nguồn video để bắt đầu</p>
+      <progress id="progress" max="100" value="0"></progress>
+      <div class="screen"><img id="frame" alt="Khung hình nhận diện" hidden><div id="empty">▶<p>Khung hình nhận diện sẽ xuất hiện tại đây</p></div></div>
+      <p id="frames">Đang chờ video</p>
+      <p class="overlay-help">D: điểm phát hiện biển · R: điểm OCR lần đọc mới nhất · AI FPS: tốc độ xử lý nhận diện. Khung cập nhật theo kết quả AI.</p>
+      <details open><summary>Chẩn đoán nhận diện biển số</summary><p id="diagnostic">Chưa có dữ liệu</p></details>
+      <details><summary>Tìm chỗ làm sót xe / ngưỡng đang dùng</summary>
+        <p id="threshold-summary">Chưa có thông số ngưỡng.</p>
+        <p id="rejection-summary">Chưa có track bị loại ở khâu lõi.</p>
+        <p id="filter-summary">Chưa có thống kê lọc kết quả.</p>
+        <p class="overlay-help">Nếu mắt thấy xe nhưng không có Track ID, detector không tạo track: hãy đối chiếu conf detector, ROI, độ phân giải và ground truth. Hệ thống chỉ gán mã lý do cho track tồn tại.</p>
+      </details>
+    </section>
+    <section class="panel results">
+      <div class="section-title"><h2>Thông tin xe</h2><span id="count" class="badge">0 xe</span><a class="action" href="/api/events.csv">↓ CSV</a></div>
+      <p id="quality-summary">Phiên hiện tại: chưa có kết quả</p>
+      <details><summary>Phạm vi nhận diện hãng</summary><p id="brand-coverage">Chưa có thông tin lớp của model hãng.</p></details>
+      <p>Giữ 3–5 ảnh tốt nhất nếu có · Xe chưa đạt ngưỡng được gắn nhãn độ tin cậy thấp · Gộp trùng theo nguồn + biển số</p>
+      <div id="cards" aria-live="polite"></div>
+    </section>
+  </div>
+</main>
+<dialog id="photo"><button id="close-photo" type="button">Đóng ✕</button><img alt="Ảnh nhận diện phóng lớn"></dialog>
+</body>
+</html>

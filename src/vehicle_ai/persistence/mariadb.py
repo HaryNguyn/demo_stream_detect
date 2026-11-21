@@ -136,5 +136,6 @@ class MariaDBEventStore:
             }
             if images:
                 item["images"] = json.loads(images) if isinstance(images, str) else images
+                item.update(item["images"].get("_recognition", {}))
             result.append(item)
         return result
