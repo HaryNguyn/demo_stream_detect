@@ -198,7 +198,7 @@ Decoder CCT vẫn giữ ký tự theo slot như trước.
 ### Export ONNX
 
 ```powershell
-& $python -m pip install -r requirements-training.txt
+& $python -m pip install -r requirements.txt
 & $python -m vehicle_ai export --engine detector `
   --weights runtime/training/vehicle-001/fit/weights/best.pt
 & $python -m vehicle_ai export --engine crnn `

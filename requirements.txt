@@ -1,10 +1,22 @@
+# Runtime dependencies for the Flask web UI, CLI pipeline and training tools.
+# Streamlit and its UI-only dependencies are intentionally excluded.
+
+# Web UI and persistence
 Flask>=3.1,<4
+python-dotenv>=1,<2
+PyMySQL>=1.1,<2
+
+# Video capture, image processing and model inference
+opencv-python>=4.9,<6
+numpy>=1.26,<3
 ultralytics>=8.3,<9
 lap>=0.5.12
-yt-dlp>=2025.1
 onnxruntime>=1.20,<2
-PyYAML>=6,<7
+# Export PyTorch/Ultralytics models to ONNX
+onnx>=1.17,<2
 dill>=0.3,<1
-PyMySQL>=1.1,<2
-python-dotenv>=1,<2
+yt-dlp>=2025.1
+
+# Configuration, matching and evaluation
+PyYAML>=6,<7
 scipy>=1.11,<2

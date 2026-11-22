@@ -21,6 +21,6 @@ Các URL và commit dưới đây được giữ để có thể tra cứu/tải
 Hai checkout cars-logos cùng commit nhưng nội dung cục bộ có thể khác nhau;
 đã giữ cả hai, không suy luận rằng có thể xóa một bản.
 
-Thông tin trọng số đang dùng ở `models/manifest.yaml`. Thư viện Python được
-liệt kê trong `requirements.txt`, dependency train bổ sung trong
-`requirements-training.txt`. Các thành phần giữ giấy phép riêng từ nguồn.
+Thông tin trọng số đang dùng ở `models/manifest.yaml`. Tất cả thư viện Python,
+kể cả dependency export ONNX, được liệt kê trong `requirements.txt`. Các thành
+phần giữ giấy phép riêng từ nguồn.
