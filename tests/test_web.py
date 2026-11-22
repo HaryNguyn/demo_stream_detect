@@ -1,5 +1,6 @@
 """HTTP contract checks for the local browser UI."""
-from io import BytesIO
+import csv
+from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -113,12 +114,52 @@ class LocalWebTests(unittest.TestCase):
         self.assertEqual(diagnostic["hidden_by_recognized_only"], 1)
 
     def test_unread_vehicles_are_excluded_from_results_and_csv(self):
-        for plate in ("", "   ", None, "29A12345"):
-            self.store.append({"Camera": "test", "Biển số": plate})
+        for plate, status in (("", "low"), ("   ", "low"), (None, "low"),
+                              ("29A12345", "confirmed")):
+            self.store.append({"Camera": "test", "Biển số": plate,
+                               "confidence_status": status})
         rows = self.client.get("/api/events").json
         self.assertEqual([row["Biển số"] for row in rows], ["29A12345"])
+        self.assertEqual(self.client.get("/api/status").json["hidden_by_plates_only"], 3)
         with self.client.get("/api/events.csv") as response:
             self.assertEqual(len(response.data.decode("utf-8-sig").splitlines()), 2)
+
+    def test_results_always_include_only_plate_rows(self):
+        self.store.append({"Camera": "test", "Track ID": 1, "Biển số": "29A12345",
+                           "confidence_status": "confirmed"})
+        self.store.append({"Camera": "test", "Track ID": 2, "Biển số": "30A99999",
+                           "confidence_status": "low"})
+        self.store.append({"Camera": "test", "Track ID": 3, "Biển số": "",
+                           "confidence_status": "low"})
+        self.assertEqual([row["Biển số"] for row in self.client.get("/api/events").json],
+                         ["30A99999", "29A12345"])
+        self.assertEqual(self.client.get("/api/status").json["hidden_by_plates_only"], 1)
+        with patch("vehicle_ai.web.Thread") as thread:
+            self.client.post("/api/analyze", data={"url": "rtsp://test"})
+        run = thread.call_args.kwargs["target"]
+        config = PipelineConfig(vehicle_weights="v", roi=[[0, 0], [1, 0], [1, 1], [0, 1]])
+
+        def analyze(*args, **kwargs):
+            kwargs["on_event"]({"Biển số": ""})
+
+        with (
+            patch("vehicle_ai.web_models.prepare_models", return_value=(config, None, None, None)),
+            patch("vehicle_ai.capture.stream_source", return_value=("test", "test")),
+            patch("vehicle_ai.pipeline.analyze_video", side_effect=analyze),
+        ):
+            run(*thread.call_args.kwargs["args"])
+        status = self.client.get("/api/status").json
+        self.assertTrue(status["plates_only"])
+        rows = self.client.get("/api/events").json
+        self.assertEqual([row["Biển số"] for row in rows], ["30A99999", "29A12345"])
+        self.assertEqual(self.client.get("/api/status").json["hidden_by_plates_only"], 1)
+        with self.client.get("/api/events.csv") as response:
+            text = response.data.decode("utf-8-sig")
+        self.assertIn("29A12345", text)
+        self.assertIn("30A99999", text)
+        csv_rows = list(csv.DictReader(StringIO(text)))
+        self.assertEqual(len(csv_rows), 2)
+        self.assertTrue(all(row["Biển số"] for row in csv_rows))
 
     def test_live_preview_is_multipart_jpeg(self):
         with patch("vehicle_ai.web.Thread") as thread:

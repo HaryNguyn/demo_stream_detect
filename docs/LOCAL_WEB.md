@@ -141,7 +141,7 @@ Kết quả được lưu ngay khi sự kiện chốt. Nếu trang báo lỗi da
 cấu hình và kết nối trước khi chạy lại. Nếu ảnh đã bị xóa khỏi ổ đĩa,
 API ảnh trả 404 nhưng thông tin sự kiện vẫn còn trong database.
 
-## 8. Docker và công cụ duyệt nhãn
+## 8. Docker
 
 ```powershell
 docker compose build
@@ -149,13 +149,6 @@ docker compose --profile ui up -d ui
 ```
 
 Web dùng cổng 8000. Đường dẫn model/ROI phải tồn tại trong container.
-
-Công cụ `review_app.py` là ứng dụng riêng để duyệt nhãn/ROI, còn dùng Streamlit:
-
-```powershell
-.\.venv312\Scripts\python.exe -m pip install -e ".[review]"
-.\.venv312\Scripts\python.exe -m streamlit run review_app.py --server.port 8502
-```
 
 ## 9. Kiểm tra
 

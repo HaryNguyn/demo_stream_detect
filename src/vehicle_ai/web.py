@@ -10,7 +10,7 @@ from threading import Condition, Event, Lock, Thread
 from flask import Flask, Response, abort, jsonify, request, send_file
 
 from .settings import image_root
-from .result_filter import EvidenceRecorder, image_score, unique_results
+from .result_filter import EvidenceRecorder, image_score, plates_only_rows, unique_results
 
 
 def create_app(store=None):
@@ -23,7 +23,8 @@ def create_app(store=None):
     frame_changed = Condition(lock)
     stop_requested = Event()
     state = {"status": "idle", "frame": 0, "total": 0, "error": "", "camera": "", "revision": 0,
-             "diagnostic": {}, "filter_stats": {}}
+             "diagnostic": {}, "filter_stats": {}, "plates_only": True,
+             "hidden_by_plates_only": 0}
     preview = {"data": None}
 
     def update(**values):
@@ -39,7 +40,9 @@ def create_app(store=None):
             from .web_models import prepare_models
 
             config, logo, plate, recognizer = prepare_models(options)
-            update(brand_classes=list(logo.names.values()) if logo is not None else [])
+            update(brand_classes=list(logo.names.values()) if logo is not None else [],
+                   plates_only=config.plates_only,
+                   hidden_by_plates_only=0)
             recorder = EvidenceRecorder(
                 store, image_root(), min_quality=config.min_image_quality,
                 min_detection=config.min_evidence_detection, min_ocr=config.min_evidence_ocr,
@@ -159,7 +162,18 @@ def create_app(store=None):
                          as_attachment=True, download_name="ket_qua_xe.csv")
 
     def recognized_events():
-        return unique_results(store.recent())
+        with lock:
+            plates_only = bool(state["plates_only"])
+        rows = unique_results(store.recent())
+        if not plates_only:
+            return rows
+        # Expose only rows with an actual plate string, same meaning as
+        # analyze_video(recognized_only=True). Unread rows stay in the store so
+        # their votes can still merge into a later confirmation.
+        visible = plates_only_rows(rows)
+        with lock:
+            state["hidden_by_plates_only"] = len(rows) - len(visible)
+        return visible
 
     @app.get("/api/stream")
     def video_stream():
@@ -204,8 +218,12 @@ def create_app(store=None):
         for item in candidates:
             path = Path(item["path"]).resolve()
             if path.is_relative_to(image_root().resolve()) and path.is_file():
+                # Read into memory first: send_file(path) keeps the file handle open
+                # until the client finishes the response, which blocks evidence
+                # cleanup with WinError 32 on Windows when the gallery is polling.
                 return send_file(
-                    path, mimetype="image/jpeg", as_attachment=request.args.get("download") == "1",
+                    io.BytesIO(path.read_bytes()), mimetype="image/jpeg",
+                    as_attachment=request.args.get("download") == "1",
                     download_name=f"{event_id}_{kind}.jpg",
                 )
         abort(404)

@@ -1,11 +1,11 @@
 # Paths are relative to this YAML file.
 vehicle_weights: ../models/yolo11n.pt
 logo_weights: ../models/logo.pt
-plate_weights: ../models/DetectLisence_YOLO11.pt
+plate_weights: ../models/best_stripped.onnx
 ocr_engine: cct
-ocr_weights: ../models/cct_s_v1_vn.onnx
-ocr_config: ../models/cct_s_v1_vn_plate_config.yaml
-model_version: baseline-logo26-001
+ocr_weights: ../models/ocr_model.onnx
+ocr_config: ../models/ocr_model.yaml
+model_version: baseline-logo26-vnocr-plate640-001
 device: cpu
 vehicle_classes:
   2: Ô tô con
@@ -15,3 +15,7 @@ vehicle_classes:
 detector_confidence: 0.2
 sample_interval_seconds: 0.5
 track_timeout_seconds: 2.0
+# DLPlate ONNX detector operates best at 640; the old PT detector used 320.
+plate_imgsz: 640
+# /api/events và CSV chỉ trả xe có chuỗi biển số.
+plates_only: true

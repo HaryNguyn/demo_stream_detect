@@ -1,11 +1,11 @@
 # Paths are relative to this YAML file.
 vehicle_weights: ../models/yolo11n.pt
 logo_weights: ../models/logo.pt
-plate_weights: ../models/DetectLisence_YOLO11.pt
+plate_weights: ../models/best_stripped.onnx
 ocr_engine: cct
 ocr_weights: ../models/ocr_model.onnx
 ocr_config: ../models/ocr_model.yaml
-model_version: vietnam-ocr-logo26-001
+model_version: vietnam-ocr-logo26-vnocr-plate640-001
 device: cpu
 vehicle_classes:
   2: Ô tô con
@@ -28,7 +28,7 @@ plate_confirm_score: 3.0
 plate_confirm_mean: 0.85
 crop_vehicle_roi: true
 vehicle_roi_padding: 0.05
-plate_imgsz: 320
+plate_imgsz: 640
 # 1.0 searches the whole car; try 0.6 after measuring missed plates.
 plate_lower_fraction: 1.0
 plate_reuse_padding: 0.3
@@ -41,6 +41,8 @@ min_evidence_detection: 0.6
 min_evidence_ocr: 0.85
 evidence_top_k: 5
 keep_low_confidence: true
+# /api/events và CSV chỉ trả xe có chuỗi biển số.
+plates_only: true
 plate_confirm_margin: 1.0
 # Additional relative-share check is disabled to preserve the current baseline.
 plate_confirm_share: 0.0

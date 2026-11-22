@@ -24,21 +24,22 @@
         <label>Chế độ cấu hình<select id="mode" name="mode"><option value="manual">Chọn model thủ công</option><option value="yaml">Pipeline YAML</option></select></label>
         <label>ROI JSON (tùy chọn)<input name="roi_path" placeholder="data/roi/camera.json"></label>
       </div>
+      <p>Danh sách kết quả và CSV chỉ chứa xe có chuỗi biển số. Xe chưa đọc được vẫn nằm trong nhật ký chẩn đoán để kiểm tra.</p>
       <div id="yaml-settings" class="settings-grid" hidden>
         <label>Pipeline YAML<input name="config" value="configs/vietnam-ocr.yaml"></label>
       </div>
       <div id="manual-settings" class="settings-grid">
         <label>Model loại xe<input name="vehicle_weights" value="models/yolo11n.pt"></label>
         <label>Model logo / hãng<input name="logo_weights" value="models/logo.pt"></label>
-        <label>Model phát hiện biển số<input name="plate_weights" value="models/DetectLisence_YOLO11.pt"></label>
-        <label>Mô hình OCR<select id="ocr-choice"><option value="cct">CCT-VN ONNX</option><option value="vn">OCR model Việt Nam ONNX</option></select></label>
-        <label>Model OCR ONNX<input name="ocr_weights" value="models/cct_s_v1_vn.onnx"></label>
-        <label>Cấu hình OCR YAML<input name="ocr_config" value="models/cct_s_v1_vn_plate_config.yaml"></label>
+        <label>Model phát hiện biển số<input name="plate_weights" value="models/best_stripped.onnx"></label>
+        <label>Mô hình OCR<select id="ocr-choice"><option value="cct">CCT-VN ONNX</option><option value="vn" selected>OCR model Việt Nam ONNX</option></select></label>
+        <label>Model OCR ONNX<input name="ocr_weights" value="models/ocr_model.onnx"></label>
+        <label>Cấu hình OCR YAML<input name="ocr_config" value="models/ocr_model.yaml"></label>
         <label>Kích thước đầu vào detector xe<input name="detector_imgsz" type="number" min="32" step="32" value="640"></label>
         <label>Số xe đọc biển tối đa / frame AI<input name="max_recognitions_per_frame" type="number" min="1" value="2"></label>
         <label>Chiều rộng xe tối thiểu (px)<input name="min_vehicle_width" type="number" min="0" value="120"></label>
         <label>Tổng điểm OCR để chốt biển<input name="plate_confirm_score" type="number" min="0.1" step="0.1" value="3.0"></label>
-        <label>Kích thước đầu vào detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="320"></label>
+        <label>Kích thước đầu vào detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="640"></label>
         <label>Phần dưới xe tìm biển (1 = toàn xe)<input name="plate_lower_fraction" type="number" min="0.1" max="1" step="0.05" value="1"></label>
         <label>Số luồng CPU cho OCR<input name="ocr_threads" type="number" min="1" value="4"></label>
         <label>Số biển tối đa / batch OCR<input name="ocr_batch_size" type="number" min="1" value="8"></label>

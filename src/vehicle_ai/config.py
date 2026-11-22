@@ -47,6 +47,8 @@ class PipelineConfig:
     min_evidence_ocr: float = 0.85
     evidence_top_k: int = 5
     keep_low_confidence: bool = True
+    # Web results and CSV expose only rows carrying an actual plate string.
+    plates_only: bool = True
     plate_confirm_margin: float = 1.0
     plate_confirm_share: float = 0.0
     type_confirm_reads: int = 3
@@ -108,6 +110,8 @@ class PipelineConfig:
             raise ValueError("evidence_top_k phải là số nguyên từ 3 đến 5.")
         if not isinstance(self.keep_low_confidence, bool):
             raise ValueError("keep_low_confidence phải là true hoặc false.")
+        if not isinstance(self.plates_only, bool):
+            raise ValueError("plates_only phải là true hoặc false.")
         for name in ("quality_target_width", "quality_target_height", "quality_target_sharpness",
                      "quality_edge_margin"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) <= 0:

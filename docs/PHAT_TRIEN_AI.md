@@ -86,7 +86,7 @@ Package:
 | `training.py` | Train/export detector và CRNN |
 | `evaluation.py` | Ghép sự kiện và tính chỉ số |
 
-`app.py` và `review_app.py` là entry point mỏng, gọi `vehicle_ai.ui`.
+`app.py` là entry point mỏng của web Flask.
 Database nằm trong `vehicle_ai.persistence`; các file compatibility ở root
 đã được loại bỏ. Schema MariaDB vẫn tương thích dữ liệu cũ.
 Xem [ARCHITECTURE.md](ARCHITECTURE.md) cho cấu trúc hiện tại.
@@ -248,11 +248,11 @@ trajectory/ROI. `possible_duplicate_events` chỉ là ứng viên trùng theo th
 ## 5. Giao diện và Docker
 
 ```powershell
-& $python -m streamlit run app.py
+& $python app.py
 ```
 
-Tick **Dùng pipeline YAML** để dùng candidate và mapping lớp mới.
-CLI là đường chạy chuẩn cho baseline/evaluation; UI phục vụ kiểm tra trực quan.
+Chọn chế độ cấu hình YAML để dùng candidate và mapping lớp mới.
+CLI là đường chạy chuẩn cho baseline/evaluation; UI web phục vụ kiểm tra trực quan.
 
 Docker Desktop cần bật Linux engine:
 

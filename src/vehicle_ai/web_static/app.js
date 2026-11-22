@@ -153,7 +153,10 @@ async function refresh() {
     const counts = status.result_counts || {confirmed: 0, low: 0};
     const totalResults = counts.confirmed + counts.low;
     $("#quality-summary").textContent = `Phiên hiện tại: ${counts.confirmed} đã chốt · ${counts.low} nhãn vàng`
-      + (totalResults ? ` · Tỷ lệ chốt ${(counts.confirmed / totalResults * 100).toFixed(1)}%` : "");
+      + (totalResults ? ` · Tỷ lệ chốt ${(counts.confirmed / totalResults * 100).toFixed(1)}%` : "")
+      + (status.plates_only
+        ? ` · Chỉ trả xe có biển số (đã ẩn ${status.hidden_by_plates_only || 0})`
+        : "");
     $("#brand-coverage").textContent = status.brand_classes?.length
       ? `Model hãng có ${status.brand_classes.length} lớp: ${status.brand_classes.join(", ")}. Đồng thuận không bảo đảm đúng với hãng ngoài danh sách.`
       : "Chưa có thông tin lớp của model hãng.";

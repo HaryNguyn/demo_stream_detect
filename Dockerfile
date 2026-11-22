@@ -11,7 +11,7 @@ RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/c
 COPY requirements.txt pyproject.toml ./
 COPY src ./src
 RUN pip install .
-COPY app.py review_app.py ./
+COPY app.py ./
 COPY configs ./configs
 RUN useradd --create-home --uid 10001 vehicle \
     && mkdir -p /app/runtime /app/models /app/data \

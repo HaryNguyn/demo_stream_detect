@@ -19,6 +19,11 @@ def image_score(row, kind="plate"):
                default=0)
 
 
+def plates_only_rows(rows):
+    """Rows that actually carry a plate string (the recognized_only semantics)."""
+    return [row for row in rows if str(row.get("Biển số") or "").strip()]
+
+
 def unique_results(rows):
     selected = {}
     for original in rows:
