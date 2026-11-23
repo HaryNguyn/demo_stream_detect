@@ -27,6 +27,47 @@ class LocalWebTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/events").json, [])
         self.assertEqual(self.client.get("/api/frame").status_code, 404)
 
+    def test_ip_camera_config_is_exposed(self):
+        values = {
+            "IP_CAM_URL": "http://10.248.166.48/", "IP_CAM_HOST": "10.248.166.48",
+            "IP_CAM_PORT": "554", "IP_CAM_USER": "admin", "IP_CAM_CHANNEL": "1",
+            "IP_CAM_STREAM": "main", "IP_CAM_BRAND": "hikvision", "IP_CAM_PATH": "",
+        }
+        with patch("vehicle_ai.web.get_setting",
+                   side_effect=lambda name, default: values.get(name, default)):
+            response = self.client.get("/api/config")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["ip_cam_url"], "http://10.248.166.48/")
+        self.assertEqual(response.json["ip_cam_host"], "10.248.166.48")
+        self.assertEqual(response.json["ip_cam_brand"], "hikvision")
+        self.assertNotIn("ip_cam_password", response.json)
+
+    def test_camera_web_page_is_rejected_before_starting(self):
+        with patch("vehicle_ai.web.Thread") as thread:
+            response = self.client.post("/api/analyze", data={
+                "url": "http://10.248.166.48/doc/page/preview.asp",
+            })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("trang quản trị", response.json["error"])
+        thread.assert_not_called()
+        self.assertEqual(self.client.get("/api/status").json["status"], "idle")
+
+    def test_ip_camera_fields_build_masked_rtsp_source(self):
+        with patch("vehicle_ai.web.Thread") as thread:
+            response = self.client.post("/api/analyze", data={
+                "ip_cam_host": "10.248.166.48", "ip_cam_user": "admin",
+                "ip_cam_password": "secret", "ip_cam_channel": "1",
+                "ip_cam_stream": "main", "ip_cam_brand": "hikvision",
+                "max_seconds": "5",
+            })
+        self.assertEqual(response.status_code, 202)
+        sources, _, _, temporary = thread.call_args.kwargs["args"]
+        self.assertIsNone(temporary)
+        self.assertEqual(sources[0][1],
+                         "rtsp://admin:secret@10.248.166.48:554/Streaming/Channels/101")
+        self.assertTrue(sources[0][2])
+        self.assertNotIn("secret", sources[0][0])
+
     def test_invalid_input_does_not_start_job(self):
         for data in ({}, {"url": "rtsp://example", "max_seconds": "nan"},
                      {"url": "rtsp://example", "max_seconds": "-1"}):

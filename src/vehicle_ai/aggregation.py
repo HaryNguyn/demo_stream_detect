@@ -110,6 +110,12 @@ class Vehicle:
         winner = self.brand_votes[self.brand]
         self.brand_score = sum(v[0] for v in winner) / len(winner)
 
+    def keeps_sample(self, kind, score):
+        """True when an encoded sample could still enter the top-k evidence list."""
+        samples = self.detected_samples if kind == "detected" else self.plate_samples
+        return len(samples) < self.candidate_limit or score > min(
+            item["_score"] for item in samples)
+
     def add_sample(self, kind, candidate):
         samples = self.detected_samples if kind == "detected" else self.plate_samples
         samples[:] = [sample for sample in samples if sample["_frame_idx"] != candidate["_frame_idx"]]

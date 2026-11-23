@@ -14,6 +14,8 @@ if sys.platform == "win32":
 import cv2
 import numpy as np
 
+from .ip_camera import looks_like_web_page, mask_url
+
 
 def corporate_proxy():
     proxy = (
@@ -53,13 +55,18 @@ def stream_source(url: str, webpage: bool = False) -> tuple[str, str]:
     youtube = hostname in {"youtube.com", "youtu.be"} or hostname.endswith(".youtube.com")
     if webpage or youtube:
         return f"Web · {url}", f"web://{url}"
-    return f"Stream · {url}", url
+    return f"Stream · {mask_url(url)}", url
 
 
 def open_capture(source):
     source = str(source)
     if source.startswith(("youtube://", "web://")):
         return WebStreamCapture(source)
+    if source.startswith(("http://", "https://")) and looks_like_web_page(source):
+        raise ValueError(
+            "URL này là trang quản trị camera, không phải luồng video. "
+            "Dùng RTSP, ví dụ rtsp://user:pass@IP:554/Streaming/Channels/101."
+        )
     if source.startswith(("http://", "https://", "rtsp://", "rtsps://")):
         return FfmpegStreamCapture(source)
     capture = cv2.VideoCapture(source)
@@ -124,8 +131,12 @@ class FfmpegStreamCapture:
             process_env["http_proxy"] = proxy
             process_env["https_proxy"] = proxy
         is_http = stdin is None and url.startswith(("http://", "https://"))
-        is_network = stdin is None and url.startswith(("http://", "https://", "rtsp://", "rtsps://"))
+        is_rtsp = stdin is None and url.startswith(("rtsp://", "rtsps://"))
+        is_network = is_http or is_rtsp
         input_options = ["-rw_timeout", "15000000"] if is_network else []
+        if is_rtsp:
+            # TCP is more reliable than UDP through NAT/firewalls for IP cameras.
+            input_options.extend(["-rtsp_transport", "tcp"])
         if is_http:
             input_options.extend([
                 "-reconnect", "1", "-reconnect_streamed", "1",

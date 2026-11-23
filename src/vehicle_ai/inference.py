@@ -1,5 +1,6 @@
 """Model adapters and per-vehicle recognition."""
 import base64
+import unicodedata
 from pathlib import Path
 
 import cv2
@@ -98,9 +99,11 @@ def apply_plate_read(vehicle, diagnostic, ocr):
 
 
 def add_vehicle_sample(vehicle, image, confidence, area, frame_area, frame_idx):
+    score = image_quality_score(image, confidence, area, frame_area)
+    if not vehicle.keeps_sample("detected", score):
+        return None
     sample = encode_crop(image)
     if sample is not None:
-        score = image_quality_score(image, confidence, area, frame_area)
         sample.update(_frame_idx=frame_idx, _score=round(score, 6), frame_idx=frame_idx,
                       quality_score=round(score, 6), detection_score=round(confidence, 6))
         vehicle.add_sample("detected", sample)
@@ -158,9 +161,11 @@ def recognize_vehicle(
         assessment = plate_quality(
             plate_image, plate_conf, (px1, py1, px2, py2), image.shape, **(quality_options or {}),
         )
-        plate_sample = encode_crop(plate_image)
+        plate_sample = None
+        score = assessment["quality_score"]
+        if vehicle.keeps_sample("plate", score):
+            plate_sample = encode_crop(plate_image)
         if plate_sample is not None:
-            score = assessment["quality_score"]
             plate_sample["_frame_idx"] = frame_idx
             plate_sample["_score"] = round(score, 6)
             plate_sample["frame_idx"] = frame_idx
@@ -206,19 +211,66 @@ def recognize_vehicle(
     return diagnostic
 
 
+def _ascii(text):
+    """Hershey fonts only draw ASCII, so drop accents before putText."""
+    text = str(text).replace("đ", "d").replace("Đ", "D")
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    return text.encode("ascii", "ignore").decode() or "?"
+
+
+def _accent(track_id):
+    return [
+        (255, 190, 60), (90, 220, 90), (70, 170, 255), (255, 120, 240),
+        (80, 225, 250), (255, 190, 120), (150, 250, 190), (215, 165, 255),
+    ][track_id % 8]
+
+
+def _panel(image, left, top, right, bottom, alpha=0.62):
+    left, top = max(0, left), max(0, top)
+    region = image[top:max(0, bottom), left:max(0, right)]
+    if region.size:
+        shade = np.empty_like(region)
+        shade[:] = (18, 18, 18)
+        cv2.addWeighted(shade, alpha, region, 1.0 - alpha, 0, region)
+
+
+def _crisp_box(image, box, color, thickness):
+    """Thin outline with brighter corner ticks so edges stay readable when scaled."""
+    x1, y1, x2, y2 = box
+    if x2 <= x1 or y2 <= y1:
+        return
+    cv2.rectangle(image, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+    tick = max(6, min(x2 - x1, y2 - y1) // 6)
+    weight = thickness + 1
+    for start, end in (((x1, y1), (x1 + tick, y1)), ((x1, y1), (x1, y1 + tick)),
+                       ((x2, y1), (x2 - tick, y1)), ((x2, y1), (x2, y1 + tick)),
+                       ((x1, y2), (x1 + tick, y2)), ((x1, y2), (x1, y2 - tick)),
+                       ((x2, y2), (x2 - tick, y2)), ((x2, y2), (x2, y2 - tick))):
+        cv2.line(image, start, end, color, weight, cv2.LINE_AA)
+
+
+def _text_style(width, height):
+    scale = float(np.clip(min(width / 1500.0, height / 750.0), 0.5, 1.05))
+    return scale, (2 if scale >= 0.85 else 1), max(3, round(6 * scale)), max(4, round(6 * scale))
+
+
 def draw_anpr_preview(frame, result, tracks, roi=None, *, inference_fps=0.0):
     """Compact plate-level overlays on the current video frame."""
     image = draw_roi(frame.copy(), roi)
     height, width = image.shape[:2]
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = max(0.35, min(0.65, width / 1800))
+    font = cv2.FONT_HERSHEY_DUPLEX
+    scale, weight, _, pad = _text_style(width, height)
 
     def caption(text, x, y, color):
-        (tw, th), baseline = cv2.getTextSize(text, font, scale, 1)
-        x = max(0, min(int(x), width - tw - 8))
-        y = max(th + 6, min(int(y), height - baseline - 3))
-        cv2.rectangle(image, (x, y - th - 5), (x + tw + 8, y + baseline + 3), color, -1)
-        cv2.putText(image, text, (x + 4, y), font, scale, (255, 255, 255), 1, cv2.LINE_AA)
+        (tw, th), baseline = cv2.getTextSize(text, font, scale, weight)
+        x = max(0, min(int(x), width - tw - 2 * pad))
+        y = max(th + pad, min(int(y), height - baseline - pad))
+        left, top = x, y - th - pad
+        right, bottom = x + tw + 2 * pad, y + baseline + pad - 2
+        _panel(image, left, top, right, bottom, 0.68)
+        cv2.rectangle(image, (left, top), (right - 1, bottom - 1), color, 1, cv2.LINE_AA)
+        cv2.putText(image, text, (x + pad, y), font, scale, (240, 240, 240), weight, cv2.LINE_AA)
 
     caption(f"Vehicle AI | ANPR | AI FPS: {inference_fps:.1f} | {width}x{height}",
             6, 20, (36, 88, 26))
@@ -244,7 +296,7 @@ def draw_anpr_preview(frame, result, tracks, roi=None, *, inference_fps=0.0):
         color = (40, 130, 35) if vehicle.confirmed_plate else (30, 100, 155)
         if vehicle.plates and not vehicle.confirmed_plate:
             text += " [LOW]"
-        cv2.rectangle(image, (left, top), (right, bottom), color, 2, cv2.LINE_AA)
+        _crisp_box(image, (left, top, right, bottom), color, weight)
         caption(f"{text} D{vehicle.plate_detection_score * 100:.0f}"
                 f"/R{vehicle.plate_ocr_score * 100:.0f} #{track_id}",
                 left, top - 7, color)
@@ -260,75 +312,82 @@ def draw_recognition(result, tracks, roi=None, *, frame=None):
             for box in boxes]
     result = result[mask]
     boxes = result.boxes
-    font, scale = cv2.FONT_HERSHEY_SIMPLEX, 0.45
     height, width = image.shape[:2]
-    placed, captions, overflow = [], [], []
-    labels = []
+    scale, weight, gap, pad = _text_style(width, height)
+    plate_font, info_font = cv2.FONT_HERSHEY_DUPLEX, cv2.FONT_HERSHEY_SIMPLEX
+    accent_width = max(2, round(3 * scale))
+    entries = []
     for box, track_id in sorted(zip(boxes, boxes.id.int().tolist()), key=lambda item: item[1]):
-        color = ((37 * track_id) % 156 + 100, (67 * track_id) % 156 + 100,
-                 (97 * track_id) % 156 + 100)
+        color = _accent(track_id)
         x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-        cv2.rectangle(image, (x1, y1), (x2, y2), color, 1, cv2.LINE_AA)
-        lines = []
+        _crisp_box(image, (x1, y1, x2, y2), color, weight)
         vehicle = tracks.get(track_id)
-        if vehicle is not None:
-            plate = max(vehicle.plates, key=vehicle.plate_rank) if vehicle.plates else "OCR: --"
-            lines.append(plate)
-        lines.append(f"{result.names[int(box.cls.item())]} #{track_id}")
-        if vehicle is not None and vehicle.brand:
-            lines.append(vehicle.brand)
-        labels.append((lines, color, x1, y1, y2))
+        plate = max(vehicle.plates, key=vehicle.plate_rank) if vehicle and vehicle.plates else ""
+        plate_text = _ascii(plate or "OCR --")
+        class_name = _ascii(result.names[int(box.cls.item())])
+        brand = _ascii(vehicle.brand) if vehicle and vehicle.brand else ""
+        info_text = " | ".join(part for part in (brand, class_name, f"#{track_id}") if part)
+        # Fit the chip inside narrow frames instead of clipping the text.
+        widest = max(cv2.getTextSize(plate_text, plate_font, 1.0, weight)[0][0],
+                     cv2.getTextSize(info_text, info_font, 1.0, 1)[0][0])
+        fit = min(1.0, max(0.25, (width - 2 * pad - accent_width) / max(1, widest)))
+        entry_scale, entry_info_scale = scale * fit, scale * fit * 0.82
+        (plate_w, plate_h), _ = cv2.getTextSize(plate_text, plate_font, entry_scale, weight)
+        (info_w, info_h), info_base = cv2.getTextSize(
+            info_text, info_font, entry_info_scale, 1)
+        entries.append({
+            "color": color, "box": (x1, y1, x2, y2), "plate": plate_text,
+            "info": info_text, "plate_h": plate_h, "info_h": info_h,
+            "info_base": info_base, "confirmed": bool(vehicle and vehicle.confirmed_plate),
+            "scale": entry_scale, "info_scale": entry_info_scale,
+            "w": max(plate_w, info_w) + 2 * pad + accent_width,
+            "h": plate_h + info_h + info_base + 3 * gap,
+        })
 
-    # Reserve the whole multiline caption, including the black text outline.
-    for lines, color, x1, y1, y2 in labels:
-        scale = min(0.5, max(1, width - 10) /
-                    max(1, max(cv2.getTextSize(line, font, 1.0, 3)[0][0] for line in lines)))
-        sizes = [cv2.getTextSize(line, font, scale, 3) for line in lines]
-        text_width = max(size[0][0] for size in sizes)
-        text_height = max(size[0][1] for size in sizes)
-        line_height = text_height + max(size[1] for size in sizes) + 4
-        label_width, label_height = text_width + 10, line_height * len(lines) + 8
-        x = max(0, min(x1, width - label_width))
-        candidates = [y1 + 3, y1 - label_height - 3, y2 + 3]
-        candidates.extend(sorted(range(0, height - label_height + 1, label_height + 3),
-                                 key=lambda y: abs(y - y1)))
-        position = None
+    # Chips reserve their full area, so information never overlaps in dense scenes.
+    placed, drawings = [], []
+    for entry in entries:
+        x1, y1, x2, y2 = entry["box"]
+        w, h = min(entry["w"], width), min(entry["h"], height)
+        x = max(0, min(x1, width - w))
+        candidates = [y1 - h - gap, y2 + gap, y1 + gap]
+        candidates.extend(sorted(range(0, max(1, height - h + 1), max(8, h // 2)),
+                                 key=lambda y: (abs(y - y1), y)))
+        chosen = None
         for y in candidates:
-            if label_width > width or y < 0 or y + label_height > height:
+            if not 0 <= y <= height - h:
                 continue
-            rect = (x, y, x + label_width, y + label_height)
-            if all(rect[2] + 3 <= a or c + 3 <= rect[0] or
-                   rect[3] + 3 <= b or d + 3 <= rect[1] for a, b, c, d in placed):
-                position = rect
+            rect = (x, int(y), x + w, int(y) + h)
+            if all(rect[2] + gap <= a or c + gap <= rect[0] or
+                   rect[3] + gap <= b or d + gap <= rect[1] for a, b, c, d in placed):
+                chosen = rect
                 break
-        if position is None:
-            overflow.append((lines, color, label_width, label_height, text_height, scale, line_height))
-            continue
-        placed.append(position)
-        captions.append((position, lines, color, text_height, scale, line_height))
-        left, top, right, bottom = position
-        if top != y1 + 3:
-            cv2.line(image, (max(0, min(x1, width - 1)), max(0, min(y1, height - 1))),
-                     (left, top + label_height // 2), color, 1, cv2.LINE_AA)
-        # Draw labels after all connectors so lines cannot cross their text.
-    for (left, top, right, bottom), lines, color, text_height, scale, line_height in captions:
-        for index, line in enumerate(lines):
-            origin = (left + 5, top + 4 + text_height + index * line_height)
-            cv2.putText(image, line, origin, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
-            cv2.putText(image, line, origin, font, scale, color, 1, cv2.LINE_AA)
-    # Dense scenes retain all information in separate rows below the original frame.
-    if overflow:
-        extra_height = sum(item[3] + 3 for item in overflow)
-        extra_width = max(0, max(item[2] for item in overflow) - width)
-        image = cv2.copyMakeBorder(image, 0, extra_height, 0, extra_width,
-                                   cv2.BORDER_CONSTANT, value=(25, 25, 25))
-        top = height
-        for lines, color, _, label_height, text_height, scale, line_height in overflow:
-            for index, line in enumerate(lines):
-                origin = (5, top + 4 + text_height + index * line_height)
-                cv2.putText(image, line, origin, font, scale, (0, 0, 0), 3, cv2.LINE_AA)
-                cv2.putText(image, line, origin, font, scale, color, 1, cv2.LINE_AA)
-            top += label_height + 3
+        if chosen is None:
+            y = max(0, min(y1, height - h))
+            chosen = (x, y, x + w, y + h)
+        placed.append(chosen)
+        drawings.append((entry, chosen))
+
+    for entry, (left, top, right, bottom) in drawings:
+        _, y1, _, y2 = entry["box"]
+        if bottom <= y1 or top >= y2:
+            cv2.line(image, (max(0, min(entry["box"][0], width - 1)),
+                             max(0, min(y1, height - 1))),
+                     (left, top + entry["h"] // 2), entry["color"], 1, cv2.LINE_AA)
+    for entry, (left, top, right, bottom) in drawings:
+        _panel(image, left, top, right, bottom, 0.66)
+        cv2.rectangle(image, (left, top), (right - 1, bottom - 1), (70, 70, 70), 1, cv2.LINE_AA)
+        cv2.rectangle(image, (left, top), (left + accent_width - 1, bottom - 1),
+                      entry["color"], -1)
+        text_x = left + accent_width + pad
+        plate_y = top + gap + entry["plate_h"]
+        plate_color = ((120, 255, 130) if entry["confirmed"] else
+                       (120, 220, 255) if entry["plate"] != "OCR --" else (190, 190, 190))
+        cv2.putText(image, entry["plate"], (text_x, plate_y), plate_font,
+                    entry["scale"], plate_color, weight, cv2.LINE_AA)
+        info_y = plate_y + entry["info_h"] + entry["info_base"] + gap
+        cv2.putText(image, entry["info"], (text_x, info_y), info_font,
+                    entry["info_scale"], (228, 228, 228), 1, cv2.LINE_AA)
     return image
 
 

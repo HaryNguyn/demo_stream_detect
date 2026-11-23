@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from .config import PipelineConfig, load_config
+from .config import PipelineConfig, apply_speed_preset, load_config
 from .roi import validate_roi
 
 
@@ -37,6 +37,7 @@ def prepare_models(options):
     if options.get("roi_path"):
         roi = json.loads(Path(options["roi_path"]).read_text(encoding="utf-8"))
         config.roi = validate_roi(roi["points"])
+    apply_speed_preset(config, options.get("speed_preset"))
     logo = optional_yolo(config.logo_weights)
     plate = optional_yolo(config.plate_weights)
     recognizer = None

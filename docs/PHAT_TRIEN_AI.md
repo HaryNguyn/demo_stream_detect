@@ -271,6 +271,29 @@ hay `.venv` vào image. Docker này dành CPU inference, chưa là image train G
 UI đọc `.env`; nếu MariaDB chạy trên Windows host thì cấu hình host là
 `host.docker.internal`. CLI baseline không cần DB.
 
+### Tối ưu tốc độ xử lý
+
+UI có mục **Tốc độ xử lý** với 3 preset: `fast`, `balanced`, `accurate`
+(`custom` giữ nguyên YAML). Preset đổi `detector_imgsz`, `plate_imgsz`,
+`sample_interval_seconds`, `ocr_top_k`, `detector_frame_stride` và `preview_fps`.
+`detector_frame_stride=2` cho phép bỏ qua khung giữa khi suy luận nhưng vẫn
+đọc/preview khung đó; `preview_fps` giới hạn tần suất vẽ và nén JPEG khung xem
+trước. Các giá trị này xuất hiện trong `diagnostic.thresholds`.
+
+Đường mã hoá ảnh bằng chứng cũng bỏ sớm sample không thể lọt vào top-k, tránh
+JPEG/base64 vô ích khi danh sách ảnh đã đầy và điểm thấp hơn mẫu hiện tại.
+
+Đo trên cùng một video mẫu 8 giây (CPU, chuỗi detector + logo + biển + OCR):
+
+```powershell
+& $python scripts/benchmark_speed.py --video path\to\clip.mp4 --max-seconds 8
+```
+
+Kết quả tham khảo trên máy này: `accurate ~4.4 FPS`, `balanced ~6.5 FPS`,
+`fast ~11.3 FPS` (chế độ chỉ detector lần lượt `~7 / ~15 / ~36 FPS`).
+Số liệu phụ thuộc CPU, độ phân giải và số xe trong khung; dùng `timings_ms`
+trên UI để xác định nút thắt thực tế trước khi đổi ngưỡng nhận diện.
+
 ## 6. Kiểm tra và giới hạn hiện tại
 
 ```powershell

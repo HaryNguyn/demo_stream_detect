@@ -11,6 +11,38 @@ $("#ocr-choice").onchange = () => {
   $('[name="ocr_weights"]').value = vn ? "models/ocr_model.onnx" : "models/cct_s_v1_vn.onnx";
   $('[name="ocr_config"]').value = vn ? "models/ocr_model.yaml" : "models/cct_s_v1_vn_plate_config.yaml";
 };
+const syncIpCamBrand = () => {
+  $("#ip-cam-path").disabled = $("#ip-cam-brand").value !== "custom";
+};
+$("#ip-cam-brand").onchange = syncIpCamBrand;
+syncIpCamBrand();
+$("#build-ip-cam").onclick = () => {
+  const host = $("#ip-cam-host").value.trim();
+  if (!host) {
+    $("#error").textContent = "Nhập IP hoặc host của camera IP.";
+    return;
+  }
+  const user = $("#ip-cam-user").value;
+  const password = $("#ip-cam-password").value;
+  const port = $("#ip-cam-port").value || "554";
+  const channel = $("#ip-cam-channel").value || "1";
+  const stream = $("#ip-cam-stream").value;
+  const brand = $("#ip-cam-brand").value;
+  let path = $("#ip-cam-path").value.trim();
+  if (!path) {
+    if (brand === "custom") {
+      $("#error").textContent = "Nhập Path RTSP cho mẫu camera Khác.";
+      return;
+    }
+    path = brand === "dahua"
+      ? `/cam/realmonitor?channel=${channel}&subtype=${stream === "main" ? 0 : 1}`
+      : `/Streaming/Channels/${channel}0${stream === "main" ? 1 : 2}`;
+  }
+  path = path.startsWith("/") ? path : `/${path}`;
+  const auth = user ? `${encodeURIComponent(user)}:${encodeURIComponent(password)}@` : "";
+  $('[name="url"]').value = `rtsp://${auth}${host}:${port}${path}`;
+  $('[name="source_mode"]').value = "auto";
+};
 const labels = {idle: "Sẵn sàng", running: "Đang xử lý", stopping: "Đang dừng…", stopped: "Đã dừng", done: "Hoàn tất", error: "Có lỗi"};
 const rejectionLabels = {
   vehicle_too_small: "xe quá nhỏ", roi_rejected: "ngoài ROI",
@@ -140,6 +172,26 @@ async function json(url, options) {
   }
   return response.json();
 }
+async function loadConfig() {
+  try {
+    const config = await json("/api/config");
+    const url = $("#source [name='url']");
+    if (config.ip_cam_url && !url.value) url.value = config.ip_cam_url;
+    const fields = {
+      "ip-cam-host": "ip_cam_host", "ip-cam-port": "ip_cam_port",
+      "ip-cam-user": "ip_cam_user", "ip-cam-channel": "ip_cam_channel",
+      "ip-cam-stream": "ip_cam_stream", "ip-cam-brand": "ip_cam_brand",
+      "ip-cam-path": "ip_cam_path",
+    };
+    for (const [id, key] of Object.entries(fields)) {
+      const input = $(`#${id}`);
+      if (config[key] && !input.value) input.value = config[key];
+    }
+    syncIpCamBrand();
+  } catch (error) {
+    $("#error").textContent = `Không tải được cấu hình camera: ${error.message}`;
+  }
+}
 async function refresh() {
   try {
     const [status, rows] = await Promise.all([json("/api/status"), json("/api/events")]);
@@ -214,4 +266,5 @@ $("#source").onsubmit = async (event) => {
   } catch (error) { $("#error").textContent = error.message; $("#start").disabled = false; }
   finally { submitting = false; }
 };
+loadConfig();
 refresh();

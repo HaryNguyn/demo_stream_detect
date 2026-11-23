@@ -12,10 +12,26 @@
 <main>
   <form id="source" class="panel controls">
     <label>Video (có thể chọn nhiều)<input name="video" type="file" accept=".mp4,.avi,.mov,.mkv" multiple></label>
-    <label>Hoặc URL stream<input name="url" placeholder="https://… hoặc rtsp://…"></label>
+    <label>Hoặc URL stream<input name="url" placeholder="rtsp://user:pass@192.168.1.64:554/Streaming/Channels/101"></label>
     <label>Loại URL<select name="source_mode"><option value="auto">Tự động / luồng trực tiếp</option><option value="webpage">Trang web (yt-dlp)</option></select></label>
+    <details class="model-settings">
+      <summary>Cấu hình IP camera / RTSP</summary>
+      <div class="settings-grid">
+        <label>IP / host camera<input id="ip-cam-host" name="ip_cam_host" placeholder="192.168.1.64"></label>
+        <label>Cổng RTSP<input id="ip-cam-port" name="ip_cam_port" type="number" min="1" max="65535" value="554"></label>
+        <label>Tài khoản<input id="ip-cam-user" name="ip_cam_user" autocomplete="username"></label>
+        <label>Mật khẩu<input id="ip-cam-password" name="ip_cam_password" type="password" autocomplete="current-password"></label>
+        <label>Mẫu camera<select id="ip-cam-brand" name="ip_cam_brand"><option value="hikvision">Hikvision</option><option value="dahua">Dahua</option><option value="custom">Khác / nhập path</option></select></label>
+        <label>Kênh<input id="ip-cam-channel" name="ip_cam_channel" type="number" min="1" value="1"></label>
+        <label>Luồng<select id="ip-cam-stream" name="ip_cam_stream"><option value="main">Main (nét hơn)</option><option value="sub">Sub (nhẹ hơn)</option></select></label>
+        <label>Path RTSP (mẫu Khác)<input id="ip-cam-path" name="ip_cam_path" placeholder="/Streaming/Channels/101"></label>
+      </div>
+      <p class="overlay-help">Ví dụ Hikvision: rtsp://user:pass@IP:554/Streaming/Channels/101 (main) hoặc .../102 (sub). URL http://IP/doc/page/preview.asp là trang quản trị, không phải luồng video. Điền các ô trên rồi bấm nút bên dưới để tạo URL.</p>
+      <button id="build-ip-cam" type="button">Tạo URL RTSP và điền vào ô URL</button>
+    </details>
     <label>Giới hạn (giây, 0 = hết video)<input name="max_seconds" type="number" min="0" value="60" required></label>
     <label>Hiển thị nhận diện<select name="overlay_style"><option value="anpr">ANPR · Khung biển số (như demo)</option><option value="vehicle">Khung toàn xe + thông tin</option></select></label>
+    <label>Tốc độ xử lý<select name="speed_preset"><option value="custom" selected>Tùy chỉnh · theo cấu hình</option><option value="fast">Nhanh · ưu tiên FPS</option><option value="balanced">Cân bằng</option><option value="accurate">Chính xác · chậm hơn</option></select></label>
     <button id="start" type="submit">▶ Phân tích video</button>
     <button id="stop" type="button" disabled>■ Stop</button>
     <details class="model-settings">
@@ -60,7 +76,7 @@
       <progress id="progress" max="100" value="0"></progress>
       <div class="screen"><img id="frame" alt="Khung hình nhận diện" hidden><div id="empty">▶<p>Khung hình nhận diện sẽ xuất hiện tại đây</p></div></div>
       <p id="frames">Đang chờ video</p>
-      <p class="overlay-help">D: điểm phát hiện biển · R: điểm OCR lần đọc mới nhất · AI FPS: tốc độ xử lý nhận diện. Khung cập nhật theo kết quả AI.</p>
+      <p class="overlay-help">D: điểm phát hiện biển · R: điểm OCR lần đọc mới nhất · AI FPS: tốc độ xử lý nhận diện. Khung cập nhật theo kết quả AI. Chọn Tốc độ xử lý để đổi độ phân giải detector, khoảng lấy mẫu, ngân sách OCR và số khung bỏ qua.</p>
       <details open><summary>Chẩn đoán nhận diện biển số</summary><p id="diagnostic">Chưa có dữ liệu</p></details>
       <details><summary>Tìm chỗ làm sót xe / ngưỡng đang dùng</summary>
         <p id="threshold-summary">Chưa có thông số ngưỡng.</p>

@@ -9,7 +9,8 @@ from threading import Condition, Event, Lock, Thread
 
 from flask import Flask, Response, abort, jsonify, request, send_file
 
-from .settings import image_root
+from .ip_camera import build_rtsp_url, mask_url, validate_stream_url
+from .settings import get_setting, image_root
 from .result_filter import EvidenceRecorder, image_score, plates_only_rows, unique_results
 
 
@@ -104,6 +105,19 @@ def create_app(store=None):
     @app.get("/")
     def index():
         return app.send_static_file("index.html")
+
+    @app.get("/api/config")
+    def config():
+        return jsonify(
+            ip_cam_url=get_setting("IP_CAM_URL", ""),
+            ip_cam_host=get_setting("IP_CAM_HOST", ""),
+            ip_cam_port=get_setting("IP_CAM_PORT", "554"),
+            ip_cam_user=get_setting("IP_CAM_USER", ""),
+            ip_cam_channel=get_setting("IP_CAM_CHANNEL", "1"),
+            ip_cam_stream=get_setting("IP_CAM_STREAM", "main"),
+            ip_cam_brand=get_setting("IP_CAM_BRAND", "hikvision"),
+            ip_cam_path=get_setting("IP_CAM_PATH", ""),
+        )
 
     @app.get("/api/status")
     def status():
@@ -241,6 +255,23 @@ def create_app(store=None):
         uploads = [item for item in request.files.getlist("video") if item.filename]
         url = request.form.get("url", "").strip()
         options = {key: value.strip() for key, value in request.form.items()}
+        if options.get("ip_cam_host"):
+            try:
+                url = build_rtsp_url(
+                    options["ip_cam_host"], username=options.get("ip_cam_user", ""),
+                    password=options.get("ip_cam_password", ""),
+                    port=options.get("ip_cam_port", 554), channel=options.get("ip_cam_channel", 1),
+                    stream=options.get("ip_cam_stream", "main"), brand=options.get("ip_cam_brand", "hikvision"),
+                    path=options.get("ip_cam_path", ""),
+                )
+            except ValueError as error:
+                return jsonify(error=str(error)), 400
+            options["source_mode"] = "auto"
+        if url and options.get("source_mode") != "webpage":
+            try:
+                url = validate_stream_url(url)
+            except ValueError as error:
+                return jsonify(error=str(error)), 400
         try:
             max_seconds = float(request.form.get("max_seconds", "60"))
             if not math.isfinite(max_seconds) or max_seconds < 0:
@@ -271,7 +302,7 @@ def create_app(store=None):
                     uploaded.save(source)
                     sources.append((f"{index} · {uploaded.filename}", source, False))
             if url:
-                sources.append((f"{len(sources) + 1} · {url}", url, True))
+                sources.append((f"{len(sources) + 1} · {mask_url(url)}", url, True))
             update(camera=sources[0][0])
             Thread(
                 target=run, args=(sources, options, max_seconds, temporary), daemon=True,

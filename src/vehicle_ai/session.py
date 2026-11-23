@@ -37,6 +37,8 @@ class RecognitionSession:
         self.thresholds = {
             "detector_confidence": config.detector_confidence,
             "detector_imgsz": config.detector_imgsz,
+            "detector_frame_stride": config.detector_frame_stride,
+            "preview_fps": config.preview_fps,
             "min_vehicle_width": config.min_vehicle_width,
             "plate_imgsz": config.plate_imgsz,
             "plate_lower_fraction": config.plate_lower_fraction,

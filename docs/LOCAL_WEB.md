@@ -39,10 +39,21 @@ có thể cần Node.js tùy nguồn.
 
 1. Chọn một hoặc nhiều video MP4/AVI/MOV/MKV.
 2. Có thể nhập thêm URL YouTube, RTSP hoặc HTTP.
-3. Loại URL **Tự động / luồng trực tiếp** tự nhận YouTube.
+   Nếu đặt `IP_CAM_URL` trong `.env`, URL camera IP sẽ được điền sẵn khi mở giao diện;
+   vẫn có thể thay bằng URL khác trước khi chạy.
+3. Với camera IP, mở **Cấu hình IP camera / RTSP**, nhập IP, cổng, tài khoản,
+   mật khẩu, kênh và chọn Hikvision/Dahua rồi bấm **Tạo URL RTSP**. Có thể điền
+   sẵn các trường rời bằng `IP_CAM_HOST`, `IP_CAM_PORT`, `IP_CAM_USER`,
+   `IP_CAM_CHANNEL`, `IP_CAM_STREAM`, `IP_CAM_BRAND`, `IP_CAM_PATH` trong `.env`.
+   Mật khẩu camera chỉ nhập trên UI, không trả về qua `/api/config`.
+4. **Lưu ý:** URL như `http://10.248.166.48/doc/page/preview.asp` là trang quản
+   trị HTML, không phải luồng video; ứng dụng sẽ báo lỗi. Dùng URL RTSP, ví dụ
+   Hikvision `rtsp://user:pass@IP:554/Streaming/Channels/101` (main) hoặc
+   `/102` (sub), Dahua `.../cam/realmonitor?channel=1&subtype=0`.
+5. Loại URL **Tự động / luồng trực tiếp** tự nhận YouTube.
    Chọn **Trang web (yt-dlp)** cho các trang khác được yt-dlp hỗ trợ.
-4. Giới hạn mặc định 60 giây **cho mỗi nguồn**; nhập 0 để xử lý đến hết.
-5. Nhấn **Phân tích video**. Các video chạy lần lượt, URL chạy cuối.
+6. Giới hạn mặc định 60 giây **cho mỗi nguồn**; nhập 0 để xử lý đến hết.
+7. Nhấn **Phân tích video**. Các video chạy lần lượt, URL chạy cuối.
 
 Tổng request upload tối đa 4 GiB. Mỗi máy chủ chạy một phiên phân tích tại
 một thời điểm. Đóng tab không dừng tác vụ; mở lại trang để xem trạng thái.

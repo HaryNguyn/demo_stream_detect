@@ -3,7 +3,7 @@ import math
 from contextlib import closing
 from copy import copy
 from threading import Lock
-from time import perf_counter
+from time import monotonic, perf_counter
 
 import cv2
 from ultralytics import YOLO
@@ -63,10 +63,15 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
         if realtime:
             overlay_lock = Lock()
             overlay = None
+            preview_clock = {"last": -math.inf}
 
             def preview_frame(number, frame_total, frame):
                 if not on_frame:
                     return
+                now = monotonic()
+                if now - preview_clock["last"] < 1.0 / config.preview_fps:
+                    return
+                preview_clock["last"] = now
                 with overlay_lock:
                     snapshot = overlay
                 if overlay_style == "anpr":
@@ -84,6 +89,8 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
             )) as frames:
                 for frame_index, frame in frames:
                     index = frame_index + 1
+                    if frame_index % config.detector_frame_stride:
+                        continue
                     started = perf_counter()
                     publish(session.feed(frame, frame_index / fps))
                     inference_fps = 1 / max(perf_counter() - started, 1e-6)
@@ -106,7 +113,8 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                 ok, frame = capture.read()
                 if not ok:
                     break
-                publish(session.feed(frame, index / fps))
+                if index % config.detector_frame_stride == 0:
+                    publish(session.feed(frame, index / fps))
                 if on_frame and index % 10 == 0:
                     on_frame(index + 1, total, draw_recognition(session.last_result, session.tracks, config.roi))
                 if on_diagnostic and index % 10 == 0:

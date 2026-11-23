@@ -26,6 +26,8 @@ class PipelineConfig:
     roi: list[list[float]] = field(default_factory=list)
     detector_imgsz: int = 640
     detector_half: bool = False
+    detector_frame_stride: int = 1
+    preview_fps: int = 15
     max_recognitions_per_frame: int = 2
     min_vehicle_width: int = 120
     min_plate_width: int = 32
@@ -78,7 +80,7 @@ class PipelineConfig:
             raise ValueError("ocr_engine phải là cct, crnn hoặc none.")
         for name in ("detector_imgsz", "max_recognitions_per_frame", "plate_confirm_reads",
                      "plate_imgsz", "plate_full_scan_interval", "ocr_top_k", "ocr_threads", "ocr_batch_size",
-                     "type_confirm_reads", "brand_confirm_reads"):
+                     "type_confirm_reads", "brand_confirm_reads", "detector_frame_stride"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} phải là số nguyên >= 1.")
@@ -92,6 +94,9 @@ class PipelineConfig:
             raise ValueError("plate_confirm_mean phải nằm trong (0, 1].")
         if not isinstance(self.detector_half, bool):
             raise ValueError("detector_half phải là true hoặc false.")
+        if isinstance(self.preview_fps, bool) or not isinstance(self.preview_fps, int) \
+                or not 1 <= self.preview_fps <= 60:
+            raise ValueError("preview_fps phải là số nguyên từ 1 đến 60.")
         if self.detector_half and self.device.lower() in {"cpu", "mps"}:
             raise ValueError("detector_half chỉ bật với thiết bị GPU hỗ trợ FP16.")
         for name in ("vehicle_roi_padding", "plate_reuse_padding"):
@@ -133,3 +138,33 @@ def load_config(path):
         if data.get(name):
             data[name] = str((path.parent / data[name]).resolve())
     return PipelineConfig(**data)
+
+
+SPEED_PRESETS = {
+    # Fewer pixels, longer sampling gaps and a shorter OCR queue for higher FPS.
+    "fast": {
+        "detector_imgsz": 416, "sample_interval_seconds": 0.8,
+        "max_recognitions_per_frame": 2, "ocr_top_k": 2, "plate_imgsz": 320,
+        "detector_frame_stride": 2, "preview_fps": 12,
+    },
+    "balanced": {
+        "detector_imgsz": 512, "sample_interval_seconds": 0.6,
+        "max_recognitions_per_frame": 2, "ocr_top_k": 3, "plate_imgsz": 384,
+        "detector_frame_stride": 1, "preview_fps": 15,
+    },
+    "accurate": {
+        "detector_imgsz": 640, "sample_interval_seconds": 0.5,
+        "max_recognitions_per_frame": 2, "ocr_top_k": 4, "plate_imgsz": 640,
+        "detector_frame_stride": 1, "preview_fps": 15,
+    },
+}
+
+
+def apply_speed_preset(config, preset):
+    """Override tuning fields for a named preset; unknown names keep the config."""
+    overrides = SPEED_PRESETS.get(str(preset or "custom").strip().lower())
+    if overrides:
+        for name, value in overrides.items():
+            setattr(config, name, value)
+        config.__post_init__()
+    return config
