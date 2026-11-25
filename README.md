@@ -31,10 +31,10 @@ Tất cả trọng số nằm trong `models/`:
 | `ocr_model.onnx` + YAML | OCR biển Việt Nam (mặc định) |
 | `logo.pt` | Nhận diện 26 hãng xe |
 
-Web mặc định chọn model thủ công với `ocr_model.onnx`, `best_stripped.onnx` và
-`logo.pt` 26 hãng; CCT vẫn chọn được trong UI. Chế độ YAML dùng `configs/vietnam-ocr.yaml`.
-`configs/baseline.yaml` vẫn dùng được cho pipeline baseline. Bản fine-tune v001 đã được loại
-bỏ sau so sánh; giữ bộ nhãn đã duyệt và báo cáo trong `data/`, `runtime/`, `docs/`.
+Web mặc định dùng `ocr_model.onnx` (OCR Việt Nam fine-tuned), `best_stripped.onnx` và
+`logo.pt` 26 hãng; UI không còn lựa chọn OCR CCT cũ. Chế độ YAML dùng `configs/vietnam-ocr.yaml`.
+`configs/baseline.yaml` vẫn dùng được cho pipeline baseline. Giữ bộ nhãn đã duyệt và báo cáo
+trong `data/`, `runtime/evaluation/`, `docs/`.
 CRNN riêng có công cụ train/export; chưa được chọn làm OCR mặc định.
 
 ## Cấu hình
@@ -67,7 +67,7 @@ src/vehicle_ai/        Core, web, database và công cụ dữ liệu/train/eval
 configs/              Cấu hình pipeline và lớp nhãn
 models/               Trọng số và thông tin nguồn
 data/                 Video, ảnh, nhãn đã duyệt, ROI
-runtime/              Database, ảnh và kết quả chạy
+runtime/              Ảnh bằng chứng, báo cáo đánh giá và kết quả chạy (không nằm trong git)
 scripts/, tests/      Công cụ kiểm tra và kiểm thử
 docs/                 Hướng dẫn và báo cáo
 ```
