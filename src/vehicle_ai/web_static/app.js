@@ -6,11 +6,6 @@ $("#mode").onchange = () => {
   $("#yaml-settings").hidden = !yaml;
   $("#manual-settings").hidden = yaml;
 };
-$("#ocr-choice").onchange = () => {
-  const vn = $("#ocr-choice").value === "vn";
-  $('[name="ocr_weights"]').value = vn ? "models/ocr_model.onnx" : "models/cct_s_v1_vn.onnx";
-  $('[name="ocr_config"]').value = vn ? "models/ocr_model.yaml" : "models/cct_s_v1_vn_plate_config.yaml";
-};
 const syncIpCamBrand = () => {
   $("#ip-cam-path").disabled = $("#ip-cam-brand").value !== "custom";
 };

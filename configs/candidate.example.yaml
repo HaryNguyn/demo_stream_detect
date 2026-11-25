@@ -1,11 +1,11 @@
 # Copy to candidate.yaml and point to your trained checkpoints.
 vehicle_weights: ../runtime/training/vehicle-001/fit/weights/best.pt
 logo_weights: ../models/logo.pt
-plate_weights: ../models/DetectLisence_YOLO11.pt
-# Keep CCT baseline initially. Switch to crnn only after comparing evaluation results.
+plate_weights: ../models/best_stripped.onnx
+# Keep the current Vietnam OCR baseline. Switch to crnn only after comparing evaluation results.
 ocr_engine: cct
-ocr_weights: ../models/cct_s_v1_vn.onnx
-ocr_config: ../models/cct_s_v1_vn_plate_config.yaml
+ocr_weights: ../models/ocr_model.onnx
+ocr_config: ../models/ocr_model.yaml
 model_version: candidate-001
 device: cpu
 # Must match the exact annotation taxonomy of the vehicle checkpoint.

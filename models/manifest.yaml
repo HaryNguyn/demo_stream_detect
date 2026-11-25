@@ -1,6 +1,6 @@
 version: 1
 baseline:
-  version: baseline-logo26-vnocr-plate640-001
+  version: baseline-logo26-vnocr2-plate640-001
   upstream_code: https://github.com/HaryNguyn/demo_stream_detect
   upstream_commit: e7a5231
   vehicle:
@@ -9,7 +9,6 @@ baseline:
     class_ids: [2, 3, 5, 7]
   plate:
     path: best_stripped.onnx
-    backup: DetectLisence_YOLO11.backup.pt
     imgsz: 640
     sha256_prefix: 40369281C635EA4E
     provenance: 'Ultralytics 8.4.86 YOLO detector exported from DLPlateServer_Portable; 1 class PLATE, dynamic input, exported at imgsz 960, raw output without NMS in graph. Ultralytics YOLO wrapper decodes and applies NMS.'
@@ -18,30 +17,29 @@ baseline:
       full_frame_ocr_accepted: '33/66 boxes at imgsz 640 vs 30/76 for old detector at imgsz 640'
       report: runtime/evaluation/plate-detector-heldout/comparison.json
       caveat: 'No full-frame plate-box ground truth; proxy metrics only.'
-    alternative: DetectLisence_YOLO11.backup.pt
   ocr:
     path: ocr_model.onnx
     config: ocr_model.yaml
     decoder: character_slots
-    sha256_prefix: 384BBBD2CEA3EF54
-    provenance: 'Vietnam OCR ONNX from DLPlateServer_Portable / vietnam.zip; 10 character slots, RGB 64x128 input. Replaced cct_s_v1_vn.onnx as default after held-out comparison.'
+    sha256_prefix: 2199E88D3EFCCB7A
+    provenance: 'Fine-tuned Vietnam CCT OCR exported from cct_s_v2_global.keras via fast_plate_ocr; 10 character slots, RGB 64x128 input. Replaces the previous ocr_model.onnx after held-out comparison.'
     heldout_evaluation:
       dataset: 'data_train_vietocr, group-isolated split seed=42, 719 test images'
-      correct: '676/719'
-      exact_match: 0.940195
-      cer: 0.011277
-      acceptance: '716/719'
+      correct: '713/719'
+      exact_match: 0.991655
+      cer: 0.001167
+      acceptance: '719/719'
       compared_with:
-        model: cct_s_v1_vn.onnx
-        correct: '619/719'
-        exact_match: 0.860918
-        cer: 0.026638
+        model: previous ocr_model.onnx
+        correct: '676/719'
+        exact_match: 0.940195
+        cer: 0.011277
+      caveat: 'Config alphabet replaces W with -; the held-out labels contain neither W nor -.'
       report: runtime/evaluation/ocr-vietocr-heldout/comparison.json
-    alternative: cct_s_v1_vn.onnx
   logo:
     path: logo.pt
     provenance: '26-class detector retrained from the original 24-class logo.pt by merging logo_24_hang.zip and logo_xe_yolo_dot1.zip; adds vinfast and isuzu, keeps class IDs 0-23, has no other class. Source checkpoint: C:/Users/ADMIN/Downloads/best.pt.'
     sha256_prefix: D89A084706EE8CD9
-  note: SHA-256 of actual model files is recorded automatically in each experiment run.json.
+  note: 'SHA-256 of actual model files is recorded automatically in each experiment run.json. cct_s_v1_vn.*, DetectLisence_YOLO11.pt and the cct_s_v2_global.keras training checkpoint are not kept in the working tree; recover older weights from git history.'
 candidate:
-  note: 'vehicle-reviewed-v001 was trained and evaluated, then its weights were removed. The vehicle model is unchanged. On 2026-11-22 the logo detector was replaced with the 26-class checkpoint, the default OCR was switched from cct_s_v1_vn.onnx to ocr_model.onnx, and the plate detector was switched to best_stripped.onnx at imgsz 640.'
+  note: 'vehicle-reviewed-v001 was trained and evaluated, then its weights were removed. The vehicle model is unchanged. On 2026-11-25 the default OCR was replaced by the fine-tuned Vietnam CCT ONNX; the plate detector remains best_stripped.onnx at imgsz 640.'

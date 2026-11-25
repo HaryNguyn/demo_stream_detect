@@ -314,4 +314,43 @@ def create_app(store=None):
             return jsonify(error=str(error)), 400
         return jsonify(status="running"), 202
 
+    # Still-image page. These routes use plate_image's own model cache and lock;
+    # they never read or modify the video state, preview, stop event or store.
+    @app.get("/plate")
+    def plate_page():
+        return app.send_static_file("plate.html")
+
+    @app.get("/api/plate/config")
+    def plate_config():
+        from .plate_image import DEFAULT_OPTIONS
+
+        paths = {name: value for name, value in DEFAULT_OPTIONS.items() if name.endswith("_weights")
+                 or name in {"config", "ocr_config"}}
+        return jsonify(defaults=DEFAULT_OPTIONS,
+                       available={name: Path(path).is_file() for name, path in paths.items()})
+
+    @app.post("/api/plate/recognize")
+    def recognize_plate_image():
+        from .plate_image import recognize_image
+
+        uploads = [item for item in request.files.getlist("image") if item and item.filename]
+        if not uploads:
+            return jsonify(error="Hãy chọn ít nhất một ảnh."), 400
+        allowed = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+        for item in uploads:
+            if Path(item.filename).suffix.lower() not in allowed:
+                return jsonify(error=f"Định dạng ảnh không được hỗ trợ: {item.filename}"), 400
+        options = {key: value.strip() for key, value in request.form.items()}
+        results = []
+        for item in uploads:
+            try:
+                result = recognize_image(item.read(), options)
+                result["filename"] = item.filename
+            except (ValueError, FileNotFoundError) as error:
+                result = {"filename": item.filename, "error": str(error)}
+            except Exception as error:
+                result = {"filename": item.filename, "error": f"{type(error).__name__}: {error}"}
+            results.append(result)
+        return jsonify(results=results)
+
     return app

@@ -5,7 +5,7 @@ plate_weights: ../models/best_stripped.onnx
 ocr_engine: cct
 ocr_weights: ../models/ocr_model.onnx
 ocr_config: ../models/ocr_model.yaml
-model_version: baseline-logo26-vnocr-plate640-001
+model_version: baseline-logo26-vnocr2-plate640-001
 device: cpu
 vehicle_classes:
   2: Ô tô con

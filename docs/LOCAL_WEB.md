@@ -68,13 +68,12 @@ Mở **Cấu hình model nhận diện / OCR / ROI**.
 |---|---|
 | Loại xe | `models/yolo11n.pt` |
 | Logo/hãng | `models/logo.pt` |
-| Phát hiện biển | `models/DetectLisence_YOLO11.pt` |
-| OCR | CCT-VN ONNX |
-| Model OCR | `models/cct_s_v1_vn.onnx` |
-| YAML OCR | `models/cct_s_v1_vn_plate_config.yaml` |
+| Phát hiện biển | `models/best_stripped.onnx` |
+| OCR | OCR Việt Nam (character slots) |
+| Model OCR | `models/ocr_model.onnx` |
+| YAML OCR | `models/ocr_model.yaml` |
 
-Chọn **OCR model Việt Nam ONNX** sẽ điền `models/ocr_model.onnx`
-và `models/ocr_model.yaml`. Có thể sửa đường dẫn theo model thực tế.
+Mặc định đã dùng OCR fine-tuned; chỉ cần sửa đường dẫn nếu đổi model.
 Các model logo/biển là tùy chọn theo cơ chế pipeline hiện tại; kiểm tra
 đường dẫn nếu không có kết quả hãng hoặc biển.
 
@@ -91,6 +90,17 @@ Nhập đường dẫn JSON có trường `points` theo định dạng ROI của
 ROI nhập tại đây ghi đè ROI trong cấu hình. Bỏ trống để dùng cấu hình gốc.
 Các đường dẫn nhập trên web là đường dẫn trên máy chạy Python;
 đường dẫn tương đối tính từ thư mục chạy lệnh.
+
+### Nhận diện ảnh đơn hoặc cả thư mục
+
+Mở `http://127.0.0.1:8000/plate`, rồi chọn một ảnh, nhiều ảnh hoặc chọn cả thư
+mục ảnh. Các định dạng hỗ trợ: JPG, JPEG, PNG, BMP và WebP. Kết quả được hiển thị
+riêng cho từng ảnh. Trang xếp ảnh vào hàng đợi và gửi từng ảnh trong một request
+riêng để tránh request quá lớn; có thể theo dõi tiến độ hoặc dừng sau ảnh hiện tại.
+Trang này không dừng phiên video hoặc ghi sự kiện vào database. Nếu detector xe
+bỏ sót, trang quét biển trực tiếp toàn ảnh ở nhiều tỉ lệ, suy luận vùng xe rồi
+thử OCR trên vài biến thể crop (đệm, phóng to, ngưỡng sáng) và chọn kết quả được
+nhiều biến thể ủng hộ nhất.
 
 ## 5. Xem kết quả
 

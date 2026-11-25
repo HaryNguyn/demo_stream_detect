@@ -157,7 +157,7 @@ Không thấy logo hoặc nhãn hãng không có trong model thì hãng có th�
 
 ## 8. Bước 6 — Phát hiện biển
 
-1. Chạy `models/DetectLisence_YOLO11.pt` trên crop xe.
+1. Chạy `models/best_stripped.onnx` trên crop xe.
 2. Dùng `conf=0.35`.
 3. Chọn một hộp có confidence cao nhất.
 4. Crop đúng hộp đó để đưa vào OCR.

@@ -8,7 +8,7 @@
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-<header><span class="logo">VA</span><div><h1>Vehicle AI</h1><p>Nhận diện phương tiện & biển số · Local workspace</p></div><span class="badge">LOCAL</span></header>
+<header><span class="logo">VA</span><div><h1>Vehicle AI</h1><p>Nhận diện phương tiện & biển số · Local workspace</p></div><nav class="nav"><a class="action" href="/plate">Nhận diện từ ảnh</a><span class="badge">LOCAL</span></nav></header>
 <main>
   <form id="source" class="panel controls">
     <label>Video (có thể chọn nhiều)<input name="video" type="file" accept=".mp4,.avi,.mov,.mkv" multiple></label>
@@ -48,7 +48,6 @@
         <label>Model loại xe<input name="vehicle_weights" value="models/yolo11n.pt"></label>
         <label>Model logo / hãng<input name="logo_weights" value="models/logo.pt"></label>
         <label>Model phát hiện biển số<input name="plate_weights" value="models/best_stripped.onnx"></label>
-        <label>Mô hình OCR<select id="ocr-choice"><option value="cct">CCT-VN ONNX</option><option value="vn" selected>OCR model Việt Nam ONNX</option></select></label>
         <label>Model OCR ONNX<input name="ocr_weights" value="models/ocr_model.onnx"></label>
         <label>Cấu hình OCR YAML<input name="ocr_config" value="models/ocr_model.yaml"></label>
         <label>Kích thước đầu vào detector xe<input name="detector_imgsz" type="number" min="32" step="32" value="640"></label>

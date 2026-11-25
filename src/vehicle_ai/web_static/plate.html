@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vehicle AI · Đọc biển số từ ảnh</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/plate.css">
+  <script src="/static/plate.js" defer></script>
+</head>
+<body>
+<header><span class="logo">VA</span><div><h1>Vehicle AI</h1><p>Nhận diện · phân loại · đọc biển số từ hình ảnh</p></div><nav class="nav"><a class="action" href="/">← Video</a><span class="badge">ẢNH</span></nav></header>
+<main>
+  <form id="plate-form" class="panel controls">
+    <label>Chọn ảnh (có thể chọn nhiều)<input id="image-files" name="image" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" multiple></label>
+    <label>Hoặc chọn thư mục ảnh<input id="folder-files" name="image" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" webkitdirectory directory multiple></label>
+    <p id="file-summary" class="metric">Chưa chọn ảnh.</p>
+    <button id="recognize" type="submit">🔍 Nhận diện ảnh</button>
+    <button id="stop-recognition" type="button" disabled>■ Dừng</button>
+    <button id="clear-queue" type="button">Xóa danh sách</button>
+    <p id="upload-progress" class="metric" role="status" aria-live="polite"></p>
+    <details class="model-settings">
+      <summary>Cấu hình model nhận diện / OCR</summary>
+      <div class="settings-grid">
+        <label>Chế độ cấu hình<select id="plate-mode" name="mode"><option value="manual">Chọn model thủ công</option><option value="yaml">Pipeline YAML</option></select></label>
+      </div>
+      <div id="plate-yaml" class="settings-grid" hidden>
+        <label>Pipeline YAML<input name="config" value="configs/vietnam-ocr.yaml"></label>
+      </div>
+      <div id="plate-manual" class="settings-grid">
+        <label>Model loại xe<input name="vehicle_weights" value="models/yolo11n.pt"></label>
+        <label>Model logo / hãng<input name="logo_weights" value="models/logo.pt"></label>
+        <label>Model phát hiện biển số<input name="plate_weights" value="models/best_stripped.onnx"></label>
+        <label>Model OCR ONNX<input name="ocr_weights" value="models/ocr_model.onnx"></label>
+        <label>Cấu hình OCR YAML<input name="ocr_config" value="models/ocr_model.yaml"></label>
+      </div>
+      <div class="settings-grid">
+        <label>Kích thước detector xe<input name="detector_imgsz" type="number" min="32" step="32" value="1280"></label>
+        <label>Kích thước detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="960"></label>
+        <label>Ngưỡng detector xe (0–1)<input name="vehicle_conf" type="number" min="0" max="1" step="0.05" value="0.15"></label>
+        <label>Ngưỡng detector biển (0–1)<input name="plate_conf" type="number" min="0" max="1" step="0.05" value="0.25"></label>
+        <label>Chiều rộng xe tối thiểu (px)<input name="min_vehicle_width" type="number" min="0" value="40"></label>
+        <label>Số luồng CPU cho OCR<input name="ocr_threads" type="number" min="1" value="4"></label>
+        <label>Số biển tối đa / batch OCR<input name="ocr_batch_size" type="number" min="1" value="8"></label>
+      </div>
+      <p>Trang này chạy độc lập với phiên video: không dừng video, không ghi database và không thay đổi ảnh bằng chứng. Ảnh lớn hơn 3000px được thu nhỏ trước khi xử lý. Nếu detector xe bỏ sót, trang quét biển trực tiếp toàn ảnh ở nhiều tỉ lệ rồi suy luận vùng xe; kết quả OCR chưa đạt ngưỡng vẫn hiển thị để đối chiếu.</p>
+    </details>
+  </form>
+  <p id="error" role="alert"></p>
+  <p id="model-warning" class="low-confidence" hidden></p>
+  <section class="panel image-queue">
+    <h2>Hàng đợi ảnh</h2>
+    <p id="queue-summary" class="metric">Chưa có ảnh.</p>
+    <progress id="queue-progress" max="100" value="0"></progress>
+    <div class="queue-table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Tệp</th><th>Trạng thái</th><th>Biển số đọc được</th></tr></thead>
+        <tbody id="queue-items"><tr><td colspan="4">Chưa có ảnh trong hàng đợi.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+  <div id="results" class="image-results" aria-live="polite"></div>
+</main>
+</body>
+</html>
