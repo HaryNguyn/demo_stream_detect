@@ -13,7 +13,7 @@ py -3.12 -m venv .venv312
 .\.venv312\Scripts\python.exe app.py
 ```
 
-- Nhận diện: **http://127.0.0.1:8000**, giao diện HTML/CSS/JavaScript và API Flask. Xem [hướng dẫn web local](docs/LOCAL_WEB.md).
+- Nhận diện: **http://127.0.0.1:8000**, giao diện HTML/CSS/JavaScript và API Flask. Xem [hướng dẫn vận hành](docs/VAN_HANH.md).
 - CLI train và đánh giá: `.\.venv312\Scripts\python.exe -m vehicle_ai --help`.
 
 Máy đã có môi trường thì bỏ bước tạo venv. Linux/macOS dùng `python3.12` và
@@ -41,7 +41,7 @@ CRNN riêng có công cụ train/export; chưa được chọn làm OCR mặc đ
 
 - Chép `.env.example` thành `.env` nếu chưa có; giữ `.env` riêng của máy.
 - MariaDB là database duy nhất. Tạo database trước rồi điền các biến `MARIADB_*`
-  trong `.env`; ứng dụng tự tạo bảng `events`. Xem [cấu hình database](docs/LOCAL_WEB.md#7-database-và-ảnh).
+  trong `.env`; ứng dụng tự tạo bảng `events`. Xem [cấu hình database](docs/VAN_HANH.md#1-cài-đặt-và-chạy-web).
 - Ảnh bằng chứng: `runtime/images/`, đổi bằng `VDTC_IMAGE_ROOT`.
 - ROI là file JSON `{"points": [[x,y], ...]}` với tọa độ chuẩn hóa 0–1; chọn ở UI
   nhận diện hoặc truyền `--roi-file` cho CLI. Danh sách kết quả và CSV chỉ trả xe
@@ -73,7 +73,7 @@ docs/                 Hướng dẫn và báo cáo
 ```
 
 Các checkout `third_party` và archive bên ngoài đã được xóa; thông tin nguồn
-vẫn được lưu trong [THIRD_PARTY.md](docs/THIRD_PARTY.md).
+vẫn được lưu trong [tổng quan dự án](docs/TONG_QUAN.md#giới-hạn-và-nguồn-tham-khảo).
 
 ## Docker CPU
 
@@ -95,13 +95,15 @@ MariaDB trên Windows host dùng `host.docker.internal` khi truy cập từ Dock
 ```
 
 Đo hàng loạt theo số lượng ảnh và ma trận độ phân giải video:
-[hướng dẫn đo](docs/DO_MEASUREMENT.md).
+[hướng dẫn đo](docs/PHAT_TRIEN_VA_DANH_GIA.md#3-đo-hiệu-năng-và-kiểm-thử).
 
 ## Phạm vi hiện tại
 
 Mỗi nguồn có tracker riêng; mặc định chốt event sau 2 giây mất dấu hoặc cuối
-nguồn. Một xe có thể tạo nhiều track. ROI lọc theo tâm bbox, detector vẫn chạy
-toàn ảnh. Chưa triển khai trigger, webhook/outbox và đồng bộ thời gian camera.
+nguồn. Một xe có thể tạo nhiều track. ROI lọc theo tâm bbox; `crop_vehicle_roi`
+cho phép detector chạy trên hộp bao ROI. Chưa triển khai trigger, webhook/outbox
+và đồng bộ thời gian camera.
 
-- Hướng dẫn dữ liệu/train: [PHAT_TRIEN_AI.md](docs/PHAT_TRIEN_AI.md).
-- Chạy và sử dụng web: [LOCAL_WEB.md](docs/LOCAL_WEB.md).
+- [Tổng quan và kiến trúc](docs/TONG_QUAN.md)
+- [Cài đặt và vận hành](docs/VAN_HANH.md)
+- [Phát triển và đánh giá AI](docs/PHAT_TRIEN_VA_DANH_GIA.md)

@@ -1,15 +1,45 @@
-"""Pure measurement helpers: resolution scaling, batch summaries, matrix parsing."""
+"""Event scoring and image/video measurement."""
+
 import unittest
 from unittest.mock import Mock, patch
 
 import numpy as np
 
+from vehicle_ai.config import PipelineConfig
+from vehicle_ai.evaluation import evaluate_events
 from vehicle_ai.measurement import (
-    compact_result, parse_video_name, rebase_config_paths, resolution_overrides,
+    compact_result,
+    parse_video_name,
+    rebase_config_paths,
+    resolution_overrides,
     summarize_images,
 )
 from vehicle_ai.pipeline import analyze_video
-from vehicle_ai.config import PipelineConfig
+
+
+class EvaluationTests(unittest.TestCase):
+    def event(self, identity, start=0, end=10, plate="30A12345", source="video"):
+        return {"event_id": identity, "source_id": source, "camera_id": "cam",
+                "started_at_seconds": start, "ended_at_seconds": end,
+                "plate": plate, "vehicle_type": "car", "brand": "Toyota"}
+
+    def test_duplicate_does_not_inflate_recall_and_wrong_plate_still_matches(self):
+        truth = [self.event("a"), self.event("b", 20, 30)]
+        predictions = [self.event("p1", plate="WRONG"), self.event("p2", 1, 9)]
+        report = evaluate_events(truth, predictions)
+        self.assertEqual(report["matched_events"], 1)
+        self.assertEqual(report["possible_duplicate_events"], 1)
+        self.assertEqual(report["missed_events"], 1)
+        self.assertEqual(report["plate_exact_matches"], 0)
+        self.assertEqual(report["event_precision"], 0.5)
+
+    def test_no_predictions_and_cross_source(self):
+        truth = [self.event("a")]
+        self.assertEqual(evaluate_events(truth, [])["plate_end_to_end_recall"], 0)
+        report = evaluate_events(truth, [self.event("p", source="other")])
+        self.assertEqual(report["matched_events"], 0)
+        with self.assertRaises(ValueError):
+            evaluate_events([], [])
 
 
 class ResolutionMeasurementTests(unittest.TestCase):

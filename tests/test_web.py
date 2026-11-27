@@ -1,14 +1,22 @@
-"""HTTP contract checks for the local browser UI."""
+"""Local Flask API, browser UI, and application settings."""
+
 import csv
+import os
+import tempfile
+import unittest
 from io import BytesIO, StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import unittest
 from unittest.mock import patch
 
+import cv2
+import numpy as np
+
 from event_store_stub import EventStoreStub
-from vehicle_ai.web import create_app
+
 from vehicle_ai.config import PipelineConfig
+from vehicle_ai.settings import get_setting
+from vehicle_ai.web import create_app
 
 
 class LocalWebTests(unittest.TestCase):
@@ -242,6 +250,57 @@ class LocalWebTests(unittest.TestCase):
             response.close()
         with patch("vehicle_ai.web.image_root", return_value=self.root / "other"):
             self.assertEqual(self.client.get(url).status_code, 404)
+
+
+class SettingsTests(unittest.TestCase):
+    def test_environment_overrides_dotenv_without_mutating_environment(self):
+        key = "VEHICLE_AI_TEST_SETTING"
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / ".env").write_text(f"{key}=from-file\n", encoding="utf-8")
+            with patch.dict(os.environ, {"VEHICLE_AI_HOME": temp}):
+                os.environ.pop(key, None)
+                self.assertEqual(get_setting(key), "from-file")
+                self.assertNotIn(key, os.environ)
+                with patch.dict(os.environ, {key: "from-env"}):
+                    self.assertEqual(get_setting(key), "from-env")
+
+
+class UITests(unittest.TestCase):
+    def test_detection_entrypoint_uses_web_server(self):
+        import app
+
+        store = EventStoreStub()
+        web = app.create_app(store)
+        with web.test_client() as client:
+            with client.get("/") as response:
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(b'/static/app.js', response.data)
+            self.assertEqual(client.get("/api/status").json["status"], "idle")
+        with patch("app.create_app", return_value=web), patch.object(web, "run") as run:
+            with patch("sys.argv", ["app.py", "--port", "8002"]):
+                app.main()
+            run.assert_called_once_with(host="127.0.0.1", port=8002, threaded=True)
+
+    def test_image_endpoint_serves_evidence_without_file_handle(self):
+        import app
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            ok, encoded = cv2.imencode(".jpg", np.zeros((12, 24, 3), np.uint8))
+            self.assertTrue(ok)
+            image_path = root / "detected_test.jpg"
+            image_path.write_bytes(encoded.tobytes())
+            store = EventStoreStub()
+            store.rows.append({"event_id": "evt-img", "images": {"detected": [
+                {"path": str(image_path), "mime_type": "image/jpeg", "quality_score": 1.0}
+            ]}})
+            web = app.create_app(store)
+            with patch("vehicle_ai.web.image_root", return_value=root):
+                with web.test_client() as client:
+                    response = client.get("/api/events/evt-img/images/detected")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data, encoded.tobytes())
+            image_path.unlink()
 
 
 if __name__ == "__main__":
