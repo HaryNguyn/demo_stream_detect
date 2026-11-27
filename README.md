@@ -94,6 +94,9 @@ MariaDB trên Windows host dùng `host.docker.internal` khi truy cập từ Dock
 .\.venv312\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
+Đo hàng loạt theo số lượng ảnh và ma trận độ phân giải video:
+[hướng dẫn đo](docs/DO_MEASUREMENT.md).
+
 ## Phạm vi hiện tại
 
 Mỗi nguồn có tracker riêng; mặc định chốt event sau 2 giây mất dấu hoặc cuối

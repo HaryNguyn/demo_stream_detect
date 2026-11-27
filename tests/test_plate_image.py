@@ -1,7 +1,6 @@
 """Still-image recognition page: isolated HTTP routes and core logic."""
 import base64
 from io import BytesIO
-from pathlib import Path
 import unittest
 from unittest.mock import patch
 

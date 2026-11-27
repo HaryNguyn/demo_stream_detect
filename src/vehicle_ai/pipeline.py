@@ -51,6 +51,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
         on_diagnostic(info)
 
     capture = open_capture(path)
+    last_frame = None
     try:
         if not capture.isOpened():
             raise ValueError("Không mở được video. Kiểm tra nguồn và codec.")
@@ -88,6 +89,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                 capture, fps, total, max_seconds, preview_frame, should_stop,
             )) as frames:
                 for frame_index, frame in frames:
+                    last_frame = frame
                     index = frame_index + 1
                     if frame_index % config.detector_frame_stride:
                         continue
@@ -113,6 +115,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                 ok, frame = capture.read()
                 if not ok:
                     break
+                last_frame = frame
                 if index % config.detector_frame_stride == 0:
                     publish(session.feed(frame, index / fps))
                 if on_frame and index % 10 == 0:
@@ -128,7 +131,11 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
             reason = "user_stop"
         publish(session.finalize(reason))
         if on_stats:
-            on_stats({"frames": index, "source_fps": fps, "content_seconds": index / fps})
+            stats = {"frames": index, "source_fps": fps, "content_seconds": index / fps}
+            shape = getattr(last_frame, "shape", None)
+            if shape is not None and len(shape) >= 2:
+                stats["frame_size"] = f"{shape[1]}x{shape[0]}"
+            on_stats(stats)
         if on_diagnostic:
             emit_diagnostics()
     finally:

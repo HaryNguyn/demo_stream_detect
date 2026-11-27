@@ -3,22 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vehicle AI · Đọc biển số từ ảnh</title>
+  <title>Vehicle AI · Kiểm tra nhận diện thư mục ảnh</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/plate.css">
   <script src="/static/plate.js" defer></script>
 </head>
 <body>
-<header><span class="logo">VA</span><div><h1>Vehicle AI</h1><p>Nhận diện · phân loại · đọc biển số từ hình ảnh</p></div><nav class="nav"><a class="action" href="/">← Video</a><span class="badge">ẢNH</span></nav></header>
-<main>
-  <form id="plate-form" class="panel controls">
-    <label>Chọn ảnh (có thể chọn nhiều)<input id="image-files" name="image" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" multiple></label>
-    <label>Hoặc chọn thư mục ảnh<input id="folder-files" name="image" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" webkitdirectory directory multiple></label>
-    <p id="file-summary" class="metric">Chưa chọn ảnh.</p>
-    <button id="recognize" type="submit">🔍 Nhận diện ảnh</button>
-    <button id="stop-recognition" type="button" disabled>■ Dừng</button>
-    <button id="clear-queue" type="button">Xóa danh sách</button>
-    <p id="upload-progress" class="metric" role="status" aria-live="polite"></p>
+<header class="plate-header"><div><h1>Kiểm tra nhận diện thư mục ảnh</h1></div><nav class="nav"><a class="action" href="/">Phân tích video</a></nav></header>
+<main class="plate-main">
+  <form id="plate-form" class="panel plate-controls">
+    <div class="upload-grid">
+      <label>Ảnh<input id="image-files" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" multiple></label>
+      <label>Thư mục ảnh<input id="folder-files" type="file" webkitdirectory multiple></label>
+      <label>Nhãn chuẩn (JSONL, tùy chọn)<input id="truth-file" type="file" accept=".jsonl"></label>
+    </div>
+    <details class="truth-help">
+      <summary>Định dạng nhãn chuẩn</summary>
+      <p>Mỗi dòng là một ảnh. Dùng tên tệp hoặc đường dẫn tương đối trong thư mục ảnh. Tùy chọn lấy biển từ tên ảnh hỗ trợ tên như 30A-123.45.jpg hoặc 30A12345_01.jpg.</p>
+      <code>{"filename":"img001.jpg","plate":"30A12345","vehicle_type":"Ô tô con","brand":"toyota"}</code>
+    </details>
+    <p id="truth-status" class="metric" role="status"></p>
+    <div class="plate-actions">
+      <button id="recognize" type="submit">Nhận diện ảnh</button>
+      <button id="stop-recognition" type="button" disabled>Dừng</button>
+      <button id="export-csv" type="button">Xuất CSV</button>
+      <label class="filename-truth"><input id="filename-truth" type="checkbox"> Lấy biển chuẩn từ tên ảnh</label>
+      <button id="clear-queue" type="button">Xóa danh sách</button>
+      <span id="upload-progress" class="metric" role="status"></span>
+    </div>
     <details class="model-settings">
       <summary>Cấu hình model nhận diện / OCR</summary>
       <div class="settings-grid">
@@ -43,23 +55,43 @@
         <label>Số luồng CPU cho OCR<input name="ocr_threads" type="number" min="1" value="4"></label>
         <label>Số biển tối đa / batch OCR<input name="ocr_batch_size" type="number" min="1" value="8"></label>
       </div>
-      <p>Trang này chạy độc lập với phiên video: không dừng video, không ghi database và không thay đổi ảnh bằng chứng. Ảnh lớn hơn 3000px được thu nhỏ trước khi xử lý. Nếu detector xe bỏ sót, trang quét biển trực tiếp toàn ảnh ở nhiều tỉ lệ rồi suy luận vùng xe; kết quả OCR chưa đạt ngưỡng vẫn hiển thị để đối chiếu.</p>
     </details>
   </form>
   <p id="error" role="alert"></p>
   <p id="model-warning" class="low-confidence" hidden></p>
   <section class="panel image-queue">
-    <h2>Hàng đợi ảnh</h2>
-    <p id="queue-summary" class="metric">Chưa có ảnh.</p>
-    <progress id="queue-progress" max="100" value="0"></progress>
+    <div class="section-title"><h2>Kết quả hàng loạt</h2><p id="queue-summary" class="metric"></p></div>
+    <progress id="queue-progress" max="1" value="0" aria-label="Tiến độ xử lý ảnh"></progress>
+    <div id="batch-kpis" class="batch-kpis"></div>
+    <details class="score-details"><summary>Thống kê biển số, loại xe và hãng</summary>
+    <div class="queue-table-wrap score-wrap">
+      <table aria-label="Tỉ lệ nhận diện">
+        <thead><tr><th scope="col">Chỉ số</th><th scope="col">Ảnh đã chấm</th><th scope="col">Đúng</th><th scope="col">Sai</th><th scope="col">Không đọc được</th><th scope="col">Độ chính xác khi đọc được</th></tr></thead>
+        <tbody id="score-items"></tbody>
+      </table>
+    </div>
+    <p class="metric">Tỉ lệ đúng tính trên toàn bộ ảnh đã chấm, kể cả ảnh không đọc được. Độ chính xác khi đọc được = đúng / (đúng + sai). Mỗi ảnh có một kết quả chính.</p>
+    </details>
+    <div class="section-title table-toolbar">
+      <h2>Chi tiết từng ảnh</h2>
+      <div class="plate-actions">
+        <label class="table-filter">Lọc<select id="result-filter"><option value="all">Tất cả</option><option value="issues">Sai / không đọc được</option><option value="correct">Biển số đúng</option><option value="wrong">Biển số sai</option><option value="unread">Không đọc được biển</option><option value="unlabeled">Thiếu nhãn biển số</option><option value="error">Lỗi xử lý</option></select></label>
+        <button id="previous-page" type="button" aria-label="Trang trước">Trước</button>
+        <span id="page-status" class="metric"></span>
+        <button id="next-page" type="button" aria-label="Trang sau">Sau</button>
+      </div>
+    </div>
     <div class="queue-table-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Tệp</th><th>Trạng thái</th><th>Biển số đọc được</th></tr></thead>
-        <tbody id="queue-items"><tr><td colspan="4">Chưa có ảnh trong hàng đợi.</td></tr></tbody>
+      <table aria-label="Kết quả từng ảnh">
+        <thead><tr><th scope="col">#</th><th scope="col">Ảnh gốc</th><th scope="col">Tên tệp</th><th scope="col">Crop biển</th><th scope="col">OCR</th><th scope="col">Biển chuẩn</th><th scope="col">Kết quả</th><th scope="col">ms</th></tr></thead>
+        <tbody id="queue-items"></tbody>
       </table>
     </div>
   </section>
-  <div id="results" class="image-results" aria-live="polite"></div>
+  <dialog id="result-dialog" aria-label="Chi tiết nhận diện ảnh">
+    <form method="dialog"><button>Đóng</button></form>
+    <div id="results" class="image-results"></div>
+  </dialog>
 </main>
 </body>
 </html>

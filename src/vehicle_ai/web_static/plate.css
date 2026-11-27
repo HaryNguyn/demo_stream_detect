@@ -1,1 +1,80 @@
 .image-results{display:grid;gap:18px}.result-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center}.preview-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.preview-pair figure{margin:0;min-width:0}.preview-pair figcaption{color:#b8c7df;font-size:12px;margin-bottom:6px}.preview-pair img{width:100%;max-height:420px;object-fit:contain;background:#090e1b;border-radius:10px}.vehicle-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:14px}.vehicle{border:1px solid #44516b;background:#10182a;border-radius:12px;padding:12px}.vehicle .plate{font-size:22px}.metric{color:#b8c7df;font-size:12px;line-height:1.7}.vehicle .thumb{width:110px;height:52px}.vehicle-head{display:flex;align-items:center;gap:10px}.vehicle-head .copy{margin-left:auto}#recognize{background:#2563eb;color:#fff;font-weight:600}#stop-recognition{background:#a83232;color:#fff}#error{color:#ff9494}#model-warning{margin-top:10px}.image-queue{margin:18px 0}.image-queue h2{margin-top:0}.image-queue progress{width:100%;height:10px}.queue-table-wrap{max-height:340px;overflow:auto;margin-top:10px}.queue-table-wrap table{width:100%;border-collapse:collapse;font-size:13px}.queue-table-wrap th,.queue-table-wrap td{padding:7px 9px;border-bottom:1px solid #35435c;text-align:left}.queue-table-wrap th{position:sticky;top:0;background:#172238}.queue-table-wrap td:nth-child(2){max-width:480px;overflow-wrap:anywhere}.queue-status-done{color:#83dfa0}.queue-status-error{color:#ff9494}.queue-status-running{color:#ffd36b}.queue-status-pending{color:#b8c7df}@media(max-width:700px){.preview-pair{grid-template-columns:1fr}}
+.plate-header {padding: 14px 4%}
+.plate-header h1 {font-size: 20px}
+.plate-header p {margin: 2px 0 0}
+.plate-main {max-width: 1280px}
+.plate-main .panel {padding: 16px}
+.upload-grid {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px}
+.upload-grid label {min-width: 0}
+.upload-grid input {padding: 8px}
+.plate-actions {display: flex; align-items: center; gap: 8px; flex-wrap: wrap}
+.plate-controls .plate-actions {margin: 10px 0}
+.truth-help {margin-top: 10px}
+.truth-help code {font-size: 12px; overflow-wrap: anywhere}
+.plate-main .model-settings {padding-top: 10px}
+.plate-main [role="status"]:empty, .plate-main #error:empty {display: none}
+.image-queue .section-title {flex-wrap: wrap}
+.image-queue .section-title p {margin: 0}
+.score-wrap {max-height: none}
+.score-wrap table {min-width: 600px}
+.table-toolbar {margin-top: 16px}
+.table-filter {display: flex; flex: initial; flex-direction: row; align-items: center; min-width: 0}
+.table-filter select {padding: 6px}
+.queue-table-wrap td {vertical-align: top}
+.image-link {text-align: left; padding: 0; border: 0; background: transparent; text-decoration: underline; overflow-wrap: anywhere}
+.image-link:hover {background: transparent; color: white}
+.queue-status-correct {color: #83dfa0}
+.queue-status-wrong {color: #ff9494}
+.queue-status-unread {color: #ffd36b}
+#result-dialog {width: min(900px, 94vw); max-width: 94vw; max-height: 88vh}
+#result-dialog form {display: flex; justify-content: flex-end; margin-bottom: 8px}
+#result-dialog img {margin-top: 0}
+.result-head h2 {overflow-wrap: anywhere}
+@media (max-width: 700px) {
+  .upload-grid {grid-template-columns: 1fr}
+  .queue-table-wrap:not(.score-wrap) table {min-width: 640px}
+}
+
+:root {color-scheme: light; color: #172334; background: #f1f4f8}
+.plate-header {background: #fff; border-color: #dce4ed}
+.plate-main {max-width: 1680px}
+.plate-main .panel {background: #fff; border-color: #dce4ed}
+.plate-main label, .plate-main p, .plate-main summary, .plate-main .metric {color: #4c5e73}
+.plate-main input, .plate-main select, .plate-main button, .plate-header .action {
+  background: #f7f9fc; color: #213954; border-color: #cdd8e6
+}
+.plate-main button:hover, .plate-header .action:hover {background: #e8f0fb}
+.plate-main :focus-visible, .plate-header :focus-visible {outline: 2px solid #215bd4; outline-offset: 2px}
+.plate-main button:disabled {cursor: default}
+.plate-main #recognize {background: #245bd2; color: white}
+.plate-main #stop-recognition {background: #f7f9fc; color: #922c36}
+.plate-main .model-settings {border-color: #dce4ed}
+.plate-main #error {color: #a52032}
+.plate-main .low-confidence {color: #75440d; background: #fff4df; border-color: #edce9b}
+.plate-main .filename-truth {flex: 0 0 auto; min-width: 0; flex-direction: row; align-items: center}
+.filename-truth input {width: auto; margin: 0}
+.batch-kpis {display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin: 12px 0}
+.batch-kpi {display: grid; gap: 5px; padding: 10px 12px; border: 1px solid #dce4ed; border-radius: 8px; background: #f7f9fc}
+.batch-kpi strong {font-size: 21px; font-variant-numeric: tabular-nums}
+.batch-kpi span {color: #4c5e73; font-size: 12px}
+.score-details {margin: 10px 0}
+.queue-table-wrap:not(.score-wrap) {max-height: min(65vh, 720px)}
+.queue-table-wrap:not(.score-wrap) table {min-width: 870px}
+.queue-table-wrap th, .queue-table-wrap td {border-color: #e1e7ee; vertical-align: middle}
+.queue-table-wrap th {background: #edf2f8; color: #344860}
+.queue-table-wrap tr:hover td {background: #f8faff}
+.queue-table-wrap td:nth-child(3) {max-width: 330px; overflow-wrap: anywhere}
+.plate-main .thumbnail-button {padding: 0; border: 0; background: transparent; display: block}
+.batch-photo, .batch-crop {display: block; object-fit: contain; border-radius: 5px; background: #edf2f8}
+.batch-photo {width: 112px; height: 66px}
+.batch-crop {width: 82px; height: 58px}
+.manual-plate {min-width: 94px; width: 116px; padding: 6px 7px}
+.queue-status-correct {color: #14613b}
+.queue-status-wrong, .queue-status-error {color: #a52032}
+.queue-status-running, .queue-status-unread {color: #795006}
+.queue-status-pending, .queue-status-unlabeled {color: #4c5e73}
+#result-dialog {background: #fff; border-color: #cdd8e6}
+#result-dialog .vehicle {background: #f7f9fc; border-color: #dce4ed}
+#result-dialog .plate {color: #213954}
+#result-dialog .badge {color: #254d83; background: #eff5ff; border-color: #ccddf5}
+#result-dialog figcaption {color: #4c5e73}

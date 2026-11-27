@@ -10,14 +10,14 @@ import time
 
 logging.getLogger("ultralytics").setLevel(logging.ERROR)
 
-from ultralytics.utils import LOGGER
+from ultralytics.utils import LOGGER  # noqa: E402
 
 LOGGER.disabled = True
 
-from vehicle_ai.config import apply_speed_preset, load_config
-from vehicle_ai.inference import optional_yolo
-from vehicle_ai.model_loader import load_recognizer
-from vehicle_ai.pipeline import analyze_video
+from vehicle_ai.config import apply_speed_preset, load_config  # noqa: E402
+from vehicle_ai.inference import optional_yolo  # noqa: E402
+from vehicle_ai.model_loader import load_recognizer  # noqa: E402
+from vehicle_ai.pipeline import analyze_video  # noqa: E402
 
 
 def summarize(values):
