@@ -6,7 +6,7 @@ from .config import PipelineConfig, apply_speed_preset, load_config
 from .roi import validate_roi
 
 
-def prepare_models(options):
+def prepare_models(options, *, ocr_only=False):
     from .inference import optional_yolo
     from .model_loader import load_recognizer
     from .ocr import VietnamesePlateRecognizer
@@ -38,12 +38,12 @@ def prepare_models(options):
         roi = json.loads(Path(options["roi_path"]).read_text(encoding="utf-8"))
         config.roi = validate_roi(roi["points"])
     apply_speed_preset(config, options.get("speed_preset"))
-    logo = optional_yolo(config.logo_weights)
-    plate = optional_yolo(config.plate_weights)
+    logo = None if ocr_only else optional_yolo(config.logo_weights)
+    plate = None if ocr_only else optional_yolo(config.plate_weights)
     recognizer = None
     if use_config:
         recognizer = load_recognizer(config)
-    elif plate is not None:
+    elif ocr_only or plate is not None:
         weights, vocabulary = options.get("ocr_weights"), options.get("ocr_config")
         if not weights or not vocabulary:
             raise ValueError("Nhập đủ model OCR ONNX và cấu hình YAML.")

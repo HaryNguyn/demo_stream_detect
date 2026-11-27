@@ -2,15 +2,16 @@
 import base64
 from io import BytesIO
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import cv2
 import numpy as np
 
 from event_store_stub import EventStoreStub
 from vehicle_ai.config import PipelineConfig
-from vehicle_ai.plate_image import _ocr_plate, analyze_image, decode_image, normalize_options
+from vehicle_ai.plate_image import _full_image_plates, _ocr_plate, analyze_image, decode_image, normalize_options
 from vehicle_ai.web import create_app
+from vehicle_ai.plate_image import recognize_image
 
 
 class _Scalar:
@@ -121,6 +122,23 @@ class _VariantRecognizer:
 
 
 class PlateImageTests(unittest.TestCase):
+    def test_mixed_inputs_use_the_appropriate_route(self):
+        models = {"recognizer": _Recognizer()}
+        for kind, shape, expected in [
+            ("auto", (48, 140), "crop"), ("crop", (720, 960), "crop"),
+            ("auto", (720, 960), "scene"), ("scene", (48, 140), "scene"),
+        ]:
+            with (
+                self.subTest(kind=kind, shape=shape),
+                patch("vehicle_ai.plate_image.get_models", return_value=models) as load,
+                patch("vehicle_ai.plate_image.analyze_image", return_value={"vehicles": [{}]}) as scene,
+            ):
+                _, payload = cv2.imencode(".png", np.zeros((*shape, 3), np.uint8))
+                result = recognize_image(payload.tobytes(), {"input_kind": kind}, preview="none")
+                self.assertEqual(result["input_route"], expected)
+                self.assertEqual(scene.call_count, int(expected == "scene"))
+                self.assertEqual(load.call_args.kwargs["ocr_only"], expected == "crop")
+
     def test_normalize_options_rejects_bad_numbers(self):
         self.assertEqual(normalize_options({})["mode"], "manual")
         with self.assertRaises(ValueError):
@@ -133,6 +151,41 @@ class PlateImageTests(unittest.TestCase):
         self.assertTrue(result["accepted"])
         self.assertEqual(result["text"], "29A12345")
         self.assertAlmostEqual(result["score"], 0.99)
+
+    def test_ocr_plate_avoids_fallback_for_clear_read(self):
+        recognizer = Mock(spec=_Recognizer)
+        recognizer.predict.return_value = [{"rec_text": "30A12345", "rec_score": 0.97}]
+        result = _ocr_plate(recognizer, np.zeros((30, 120, 3), np.uint8))
+        self.assertEqual((result["text"], result["variant"]), ("30A12345", "original"))
+        recognizer.predict.assert_called_once()
+
+    def test_ocr_plate_reads_two_lines_side_by_side(self):
+        class TwoLineRecognizer:
+            def predict_batch(self, images):
+                return [[{"rec_text": "30A12345", "rec_score": 0.97}]
+                        if image.shape[1] / image.shape[0] > 5 else []
+                        for image in images]
+
+        result = _ocr_plate(TwoLineRecognizer(), np.zeros((32, 48, 3), np.uint8))
+        self.assertEqual((result["text"], result["variant"]), ("30A12345", "original_two_lines"))
+
+    def test_ocr_plate_recovers_sideways_crop(self):
+        class LandscapeRecognizer:
+            def predict_batch(self, images):
+                return [[{"rec_text": "30A12345", "rec_score": 0.97}]
+                        if image.shape[1] / image.shape[0] > 2 else []
+                        for image in images]
+
+        result = _ocr_plate(LandscapeRecognizer(), np.zeros((90, 30, 3), np.uint8))
+        self.assertEqual((result["text"], result["variant"]), ("30A12345", "rotate_90"))
+
+    def test_portrait_detection_maps_rotated_plate_to_original_coordinates(self):
+        detector = Mock()
+        detector.predict.side_effect = lambda image, **kwargs: [
+            _Result([_Box([40, 20, 100, 40], 0.95, 0)] if image.shape[1] > image.shape[0] else [])
+        ]
+        found = _full_image_plates(detector, np.zeros((200, 100, 3), np.uint8), normalize_options({}))
+        self.assertEqual(found, [((20, 100, 40, 160), 0.95)])
 
     def test_decode_image_caps_large_inputs(self):
         image = np.zeros((3000, 4000, 3), np.uint8)
@@ -150,10 +203,10 @@ class PlateImageTests(unittest.TestCase):
             "plate": _Plate(), "recognizer": _Recognizer(),
         }
         result = analyze_image(np.zeros((200, 240, 3), np.uint8), models, normalize_options({}))
-        self.assertEqual(result["summary"], {"vehicles": 1, "plates_detected": 1, "plates_accepted": 1})
+        self.assertEqual(result["summary"], {"vehicles": 0, "plates_detected": 1, "plates_accepted": 1})
         vehicle = result["vehicles"][0]
-        self.assertEqual(vehicle["vehicle_type"], "Ô tô con")
-        self.assertEqual(vehicle["brand"], "Toyota")
+        self.assertEqual(vehicle["vehicle_type"], "")
+        self.assertEqual(vehicle["brand"], "")
         self.assertEqual(vehicle["plate_text"], "29A12345")
         self.assertTrue(vehicle["accepted"])
         self.assertEqual(vehicle["plate_bbox"], [10, 80, 150, 120])
@@ -169,9 +222,9 @@ class PlateImageTests(unittest.TestCase):
 
         result = analyze_image(np.zeros((200, 240, 3), np.uint8), models, normalize_options({}))
 
-        self.assertEqual(result["summary"], {"vehicles": 1, "plates_detected": 1, "plates_accepted": 1})
-        self.assertEqual([vehicle["vehicle_type"] for vehicle in result["vehicles"]], ["Ô tô con"])
-        self.assertGreaterEqual(plate.calls, 3)
+        self.assertEqual(result["summary"], {"vehicles": 0, "plates_detected": 1, "plates_accepted": 1})
+        self.assertEqual(result["vehicles"][0]["vehicle_type"], "")
+        self.assertEqual(plate.calls, 2)
 
     def test_analyze_image_recovers_plate_when_vehicle_detector_misses(self):
         config = PipelineConfig(vehicle_weights="models/yolo11n.pt")
@@ -182,10 +235,9 @@ class PlateImageTests(unittest.TestCase):
 
         result = analyze_image(np.zeros((240, 240, 3), np.uint8), models, normalize_options({}))
 
-        self.assertEqual(result["summary"], {"vehicles": 1, "plates_detected": 1, "plates_accepted": 1})
+        self.assertEqual(result["summary"], {"vehicles": 0, "plates_detected": 1, "plates_accepted": 1})
         vehicle = result["vehicles"][0]
-        self.assertTrue(vehicle["fallback"])
-        self.assertEqual(vehicle["vehicle_type"], "Xe máy (suy luận)")
+        self.assertEqual(vehicle["vehicle_type"], "")
         self.assertEqual(vehicle["plate_text"], "29A12345")
 
     def test_analyze_image_accepts_person_candidate_only_with_plate_below(self):
@@ -197,9 +249,9 @@ class PlateImageTests(unittest.TestCase):
 
         result = analyze_image(np.zeros((240, 240, 3), np.uint8), models, normalize_options({}))
 
-        self.assertEqual(result["summary"], {"vehicles": 1, "plates_detected": 1, "plates_accepted": 1})
+        self.assertEqual(result["summary"], {"vehicles": 0, "plates_detected": 1, "plates_accepted": 1})
         vehicle = result["vehicles"][0]
-        self.assertEqual(vehicle["vehicle_type"], "Xe máy (suy luận)")
+        self.assertEqual(vehicle["vehicle_type"], "")
         self.assertEqual(vehicle["plate_text"], "29A12345")
         self.assertGreaterEqual(vehicle["plate_bbox"][1], 140)
 
@@ -216,6 +268,18 @@ class PlateImageTests(unittest.TestCase):
 
 
 class PlateWebTests(unittest.TestCase):
+    def test_stream_delivers_first_result_before_processing_second_image(self):
+        with patch("vehicle_ai.plate_image.recognize_image", side_effect=lambda *_: {}) as recognize:
+            response = self.client.post("/api/plate/recognize", headers={"Accept": "application/x-ndjson"},
+                                        data={"image": [(BytesIO(b"a"), "a.jpg"), (BytesIO(b"b"), "b.jpg")]},
+                                        buffered=False)
+            with response:
+                chunks = iter(response.response)
+                self.assertIn(b"a.jpg", next(chunks))
+                self.assertEqual(recognize.call_count, 1)
+                self.assertIn(b"b.jpg", next(chunks))
+                self.assertEqual([call.args[0] for call in recognize.call_args_list], [b"a", b"b"])
+
     def setUp(self):
         self.store = EventStoreStub()
         self.client = create_app(self.store).test_client()
@@ -229,7 +293,8 @@ class PlateWebTests(unittest.TestCase):
         self.assertIn(b'id="stop-recognition"', response.data)
         config = self.client.get("/api/plate/config").json
         self.assertEqual(config["defaults"]["plate_weights"], "models/best_stripped.onnx")
-        self.assertIn("vehicle_weights", config["available"])
+        self.assertIn("plate_weights", config["available"])
+        self.assertNotIn("vehicle_weights", config["available"])
 
     def test_image_endpoint_does_not_touch_video_session_or_store(self):
         payload = {"results": [{"filename": "car.jpg", "vehicles": [], "annotated": "",
@@ -274,6 +339,15 @@ class PlateWebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         recognizer.assert_not_called()
         self.assertEqual(self.client.post("/api/plate/recognize", data={}).status_code, 400)
+
+    def test_image_endpoint_requests_crop_only_when_selected(self):
+        with patch("vehicle_ai.plate_image.recognize_image", return_value={}) as recognizer:
+            response = self.client.post("/api/plate/recognize", data={
+                "image": (BytesIO(b"image"), "car.jpg"),
+                "preview": "crop",
+            })
+        self.assertEqual(response.status_code, 200)
+        recognizer.assert_called_once_with(b"image", {}, preview="crop")
 
 
 if __name__ == "__main__":

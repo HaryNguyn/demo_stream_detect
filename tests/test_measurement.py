@@ -78,6 +78,10 @@ class ImageSummaryTests(unittest.TestCase):
         self.assertEqual((result["images"], result["errors"]), (4, 1))
         self.assertEqual(result["plates_accepted"], 2)
         self.assertAlmostEqual(result["wall_seconds"], 0.10)
+        self.assertEqual(result["measured_images"], 3)
+        self.assertEqual(result["images_per_second"], 30)
+        self.assertEqual(result["wall_ms_per_image"], 33.33)
+        self.assertEqual(result["mean_ms"], 30)
         self.assertEqual(result["median_ms"], 30)
         self.assertEqual(result["p95_ms"], 40)
         self.assertEqual(result["groups"]["plate"]["exact_over_total"], "1/2")
@@ -98,6 +102,11 @@ class ImageSummaryTests(unittest.TestCase):
         result = summarize_images([{"filename": "a.jpg", "elapsed_ms": 5, "vehicles": []}])
         self.assertNotIn("groups", result)
         self.assertEqual(result["truth_images"], 0)
+
+    def test_warmup_can_cover_entire_batch(self):
+        result = summarize_images([{"elapsed_ms": 10, "elapsed_total_s": 0.01}], warmup=2)
+        self.assertEqual(result["measured_images"], 0)
+        self.assertIsNone(result["images_per_second"])
 
 
 class SourceSizeTests(unittest.TestCase):

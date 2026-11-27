@@ -15,15 +15,23 @@
     <div class="upload-grid">
       <label>Ảnh<input id="image-files" type="file" accept=".jpg,.jpeg,.png,.bmp,.webp" multiple></label>
       <label>Thư mục ảnh<input id="folder-files" type="file" webkitdirectory multiple></label>
-      <label>Nhãn chuẩn (JSONL, tùy chọn)<input id="truth-file" type="file" accept=".jsonl"></label>
+      <label>Nhãn chuẩn Excel hoặc JSONL<input id="truth-file" type="file" accept=".xlsx,.jsonl"></label>
     </div>
     <details class="truth-help">
       <summary>Định dạng nhãn chuẩn</summary>
       <p>Mỗi dòng là một ảnh. Dùng tên tệp hoặc đường dẫn tương đối trong thư mục ảnh. Tùy chọn lấy biển từ tên ảnh hỗ trợ tên như 30A-123.45.jpg hoặc 30A12345_01.jpg.</p>
-      <code>{"filename":"img001.jpg","plate":"30A12345","vehicle_type":"Ô tô con","brand":"toyota"}</code>
+      <code>{"filename":"img001.jpg","plate":"30A12345"}</code>
     </details>
     <p id="truth-status" class="metric" role="status"></p>
+    <p class="metric">Excel (.xlsx) dùng cột PLATE_NUMBER. Thêm FILENAME để ghép theo tên ảnh. Nếu chỉ có biển số, hãy xếp các dòng theo đường dẫn ảnh tăng dần (ví dụ 1.jpg, 10.jpg, 2.jpg). Số dòng phải bằng số ảnh.</p>
     <div class="plate-actions">
+      <label>Loại ảnh
+        <select name="input_kind">
+          <option value="auto">Tự động · thư mục hỗn hợp</option>
+          <option value="scene">Ảnh toàn xe · detect rồi OCR</option>
+          <option value="crop">Ảnh đã cắt biển · chỉ OCR</option>
+        </select>
+      </label>
       <button id="recognize" type="submit">Nhận diện ảnh</button>
       <button id="stop-recognition" type="button" disabled>Dừng</button>
       <button id="export-csv" type="button">Xuất CSV</button>
@@ -40,18 +48,13 @@
         <label>Pipeline YAML<input name="config" value="configs/vietnam-ocr.yaml"></label>
       </div>
       <div id="plate-manual" class="settings-grid">
-        <label>Model loại xe<input name="vehicle_weights" value="models/yolo11n.pt"></label>
-        <label>Model logo / hãng<input name="logo_weights" value="models/logo.pt"></label>
         <label>Model phát hiện biển số<input name="plate_weights" value="models/best_stripped.onnx"></label>
         <label>Model OCR ONNX<input name="ocr_weights" value="models/ocr_model.onnx"></label>
         <label>Cấu hình OCR YAML<input name="ocr_config" value="models/ocr_model.yaml"></label>
       </div>
       <div class="settings-grid">
-        <label>Kích thước detector xe<input name="detector_imgsz" type="number" min="32" step="32" value="1280"></label>
-        <label>Kích thước detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="960"></label>
-        <label>Ngưỡng detector xe (0–1)<input name="vehicle_conf" type="number" min="0" max="1" step="0.05" value="0.15"></label>
+        <label>Kích thước detector biển<input name="plate_imgsz" type="number" min="32" step="32" value="640"></label>
         <label>Ngưỡng detector biển (0–1)<input name="plate_conf" type="number" min="0" max="1" step="0.05" value="0.25"></label>
-        <label>Chiều rộng xe tối thiểu (px)<input name="min_vehicle_width" type="number" min="0" value="40"></label>
         <label>Số luồng CPU cho OCR<input name="ocr_threads" type="number" min="1" value="4"></label>
         <label>Số biển tối đa / batch OCR<input name="ocr_batch_size" type="number" min="1" value="8"></label>
       </div>
@@ -63,7 +66,8 @@
     <div class="section-title"><h2>Kết quả hàng loạt</h2><p id="queue-summary" class="metric"></p></div>
     <progress id="queue-progress" max="1" value="0" aria-label="Tiến độ xử lý ảnh"></progress>
     <div id="batch-kpis" class="batch-kpis"></div>
-    <details class="score-details"><summary>Thống kê biển số, loại xe và hãng</summary>
+    <p id="read-log" class="metric"></p>
+    <details class="score-details"><summary>Thống kê biển số</summary>
     <div class="queue-table-wrap score-wrap">
       <table aria-label="Tỉ lệ nhận diện">
         <thead><tr><th scope="col">Chỉ số</th><th scope="col">Ảnh đã chấm</th><th scope="col">Đúng</th><th scope="col">Sai</th><th scope="col">Không đọc được</th><th scope="col">Độ chính xác khi đọc được</th></tr></thead>

@@ -1,5 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 let busy = false;
+let supportsBufferedStream = false;
 let stopRequested = false;
 const queue = [];
 const imageInputs = [$("#image-files"), $("#folder-files")];
@@ -42,6 +43,7 @@ async function json(url, options) {
 async function loadConfig() {
   try {
     const config = await json("/api/plate/config");
+    supportsBufferedStream = config.buffered_upload_stream === true;
     const missing = Object.entries(config.available || {})
       .filter(([, exists]) => !exists).map(([name]) => name);
     if (missing.length) {
@@ -80,21 +82,18 @@ function vehicleCard(vehicle) {
   card.append(head);
   card.append(node("p", vehicle.status || "", "metric"));
   const facts = node("div", undefined, "metadata");
-  facts.append(
-    badge(`Xe #${vehicle.index}`),
-    badge(vehicle.vehicle_type || "Loại xe ?"),
-  );
-  if (vehicle.brand) facts.append(badge(vehicle.brand));
+  facts.append(badge(`Biển #${vehicle.index}`));
   facts.append(badge(vehicle.accepted ? "Biển đã đọc" : "Chưa chốt"));
   card.append(facts);
   const details = node("div", undefined, "metric");
   details.append(
-    meta("Xe", `${(Number(vehicle.vehicle_confidence) * 100).toFixed(0)}%`),
-    meta("Hãng", vehicle.brand ? `${(Number(vehicle.brand_confidence) * 100).toFixed(0)}%` : "—"),
     meta("Biển", vehicle.plate_detected ? `${(Number(vehicle.plate_confidence) * 100).toFixed(0)}%` : "—"),
     meta("OCR", vehicle.plate_text ? `${(Number(vehicle.plate_score) * 100).toFixed(0)}%` : "—"),
   );
   card.append(details);
+  if (vehicle.ocr_variant && vehicle.ocr_variant !== "original") {
+    card.append(node("p", `Biến thể OCR · ${vehicle.ocr_variant}`, "metric"));
+  }
   if (vehicle.plate_quality?.quality_factors) {
     const factors = vehicle.plate_quality.quality_factors;
     card.append(node("p", `Chất lượng ảnh biển: ${(Number(vehicle.plate_quality.quality_score) * 100).toFixed(0)}/100 · ${factors.plate_width}×${factors.plate_height}px · Nét ${factors.sharpness}`, "metric"));
@@ -103,14 +102,19 @@ function vehicleCard(vehicle) {
 }
 
 const pageSize = 50;
-const categories = {plate: "Biển số", vehicle_type: "Loại xe", brand: "Hãng xe"};
+const categories = {plate: "Biển số"};
 const labels = {
   pending: "Chờ xử lý", running: "Đang xử lý", correct: "Đúng", wrong: "Sai",
   unread: "Không đọc được", unlabeled: "Thiếu nhãn", error: "Lỗi xử lý",
 };
 const percent = new Intl.NumberFormat("vi-VN", {style: "percent", maximumFractionDigits: 1});
 const recentPreviews = new Map();
+const batchSize = 12;
+const batchBytes = 24 * 1024 * 1024;
+let runStarted = null;
+let runElapsed = 0;
 let truth = new Map();
+let orderedTruth = null;
 let page = 0;
 let loadingTruth = false;
 let previewUrl;
@@ -146,6 +150,15 @@ function readTruth(text) {
 }
 
 function applyTruth() {
+  if (orderedTruth) {
+    const sorted = [...queue].sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+    const matches = sorted.length === orderedTruth.length;
+    sorted.forEach((item, index) => { item.expected = matches ? orderedTruth[index] : null; });
+    $("#truth-status").textContent = matches
+      ? `Đã ghép ${sorted.length} nhãn theo thứ tự đường dẫn ảnh.`
+      : `Chưa ghép nhãn: Excel có ${orderedTruth.length} dòng, đã chọn ${sorted.length} ảnh.`;
+    return;
+  }
   const counts = new Map();
   for (const item of queue) counts.set(item.basename, (counts.get(item.basename) || 0) + 1);
   for (const item of queue) {
@@ -187,9 +200,9 @@ function primaryPrediction(vehicles) {
   const vehicle = best || vehicles[0];
   return {
     plate: best?.plate_text || "",
-    vehicle_type: vehicle?.vehicle_type || "",
-    brand: vehicle?.brand || "",
-    score: best?.plate_score,
+    score: vehicle?.plate_text ? vehicle.plate_score : null,
+    detectionScore: vehicle?.plate_detected ? vehicle.plate_confidence : null,
+    variant: vehicle?.ocr_variant || "",
     crop: best?.plate_image || vehicles.find((entry) => entry.plate_image)?.plate_image || "",
   };
 }
@@ -201,11 +214,15 @@ function updateQueueSummary() {
   let errors = 0;
   let reads = 0;
   let elapsed = 0;
+  let timed = 0;
   for (const item of queue) {
     if (item.status === "error") errors += 1;
     if (item.status !== "done") continue;
     done += 1;
-    elapsed += Number(item.result?.elapsed_ms || 0);
+    if (Number.isFinite(item.result?.elapsed_ms)) {
+      elapsed += item.result.elapsed_ms;
+      timed += 1;
+    }
     if (item.predicted.plate) reads += 1;
     for (const field of Object.keys(categories)) {
       if (normalize(field, expectedValue(item, field))) scores[field][classify(item, field)] += 1;
@@ -218,6 +235,7 @@ function updateQueueSummary() {
   $("#queue-summary").textContent = `${done + errors}/${queue.length} đã xử lý · ${reads}/${done} ảnh đọc được biển (${done ? percent.format(reads / done) : "—"}) · ${errors} lỗi`;
   const {correct, wrong, unread} = scores.plate;
   const graded = correct + wrong + unread;
+  const wallMs = runElapsed + (runStarted === null ? 0 : performance.now() - runStarted);
   const kpis = [
     ["Ảnh đã xử lý", `${done + errors}/${queue.length}`],
     ["Tỉ lệ đọc được", done ? percent.format(reads / done) : "—"],
@@ -226,7 +244,9 @@ function updateQueueSummary() {
     ["Đọc sai", wrong],
     ["Không đọc được", done - reads],
     ["Lỗi xử lý", errors],
-    ["ms/ảnh trung bình", done ? Math.round(elapsed / done) : "—"],
+    ["Máy chủ · ms/ảnh thành công", timed ? Math.round(elapsed / timed) : "-"],
+    ["Toàn lô · ảnh xử lý thành công/giây", wallMs
+      ? (done * 1000 / wallMs).toFixed(2) : "-"],
   ];
   $("#batch-kpis").replaceChildren(...kpis.map(([label, value]) => {
     const card = node("div", undefined, "batch-kpi");
@@ -296,10 +316,16 @@ function renderQueue() {
       crop.replaceChildren(plate);
     }
     const prediction = node("td");
+    if (item.result?.input_route) {
+      prediction.append(node("div", item.result.input_route === "crop" ? "OCR ảnh cắt" : "Detect + OCR", "metric"));
+    }
     prediction.append(node("strong", item.predicted?.plate || "—"));
-    if (item.predicted?.score != null) prediction.append(node("div", percent.format(item.predicted.score), "metric"));
-    const vehicle = [item.predicted?.vehicle_type, item.predicted?.brand].filter(Boolean).join(" · ");
-    if (vehicle) prediction.append(node("div", vehicle, "metric"));
+    if (item.predicted?.detectionScore != null) {
+      prediction.append(node("div", `Detect biển ${percent.format(item.predicted.detectionScore)}`, "metric"));
+    }
+    if (item.predicted?.score != null) {
+      prediction.append(node("div", `OCR ${percent.format(item.predicted.score)}`, "metric"));
+    }
 
     const expected = node("td");
     const input = node("input", undefined, "manual-plate");
@@ -370,7 +396,6 @@ function renderResult(item, result, regenerated = false) {
   const head = node("div", undefined, "result-head");
   head.append(
     node("h2", item.name),
-    badge(`${result.summary?.vehicles || 0} xe có biển`),
     badge(`${result.summary?.plates_detected || 0} biển`),
     badge(`${result.summary?.plates_accepted || 0} biển đọc được`),
   );
@@ -403,7 +428,7 @@ function renderResult(item, result, regenerated = false) {
     previews.append(annotated);
   }
   section.append(previews);
-  if (item.status === "done" && !result.annotated && !regenerated && !recentPreviews.has(item)) {
+  if (item.status === "done" && result.input_route !== "crop" && !result.annotated && !regenerated && !recentPreviews.has(item)) {
     const button = node("button", "Tạo lại ảnh đánh dấu");
     const status = node("p", "", "metric");
     status.setAttribute("role", "status");
@@ -412,6 +437,8 @@ function renderResult(item, result, regenerated = false) {
       status.textContent = "Đang tạo ảnh…";
       try {
         const regenerated = await requestRecognition(item, item.fields);
+        recentPreviews.set(item, regenerated);
+        if (recentPreviews.size > 12) recentPreviews.delete(recentPreviews.keys().next().value);
         if (button.isConnected) renderResult(item, regenerated, true);
       } catch (error) {
         status.textContent = error.message;
@@ -423,7 +450,7 @@ function renderResult(item, result, regenerated = false) {
   if (result.width) section.append(node("p", `${result.width} × ${result.height} px`, "metric"));
   const vehicles = result.vehicles || [];
   if (!vehicles.length && item.status === "done") {
-    section.append(node("p", "Không tìm thấy xe có biển số trong ảnh.", "metric"));
+    section.append(node("p", "Không tìm thấy biển số trong ảnh.", "metric"));
   } else if (vehicles.length) {
     const grid = node("div", undefined, "vehicle-grid");
     vehicles.forEach((vehicle) => grid.append(vehicleCard(vehicle)));
@@ -443,15 +470,51 @@ function setBusy(value) {
     .forEach((input) => { input.disabled = value; });
 }
 
-async function requestRecognition(item, fields) {
+async function* requestBatch(items, fields, preview) {
   const data = new FormData();
   fields.forEach(([key, value]) => data.append(key, value));
-  data.append("image", item.file, item.name);
-  const payload = await json("/api/plate/recognize", {method: "POST", body: data});
-  const result = payload.results?.[0];
-  if (!result) throw new Error("Máy chủ không trả kết quả cho ảnh này.");
-  if (result.error) throw new Error(result.error);
-  return result;
+  if (preview) data.set("preview", preview);
+  for (const item of items) data.append("image", item.file, item.name);
+  const response = await fetch("/api/plate/recognize", {
+    method: "POST", body: data,
+    headers: {Accept: supportsBufferedStream ? "application/x-ndjson" : "application/json"},
+  });
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `HTTP ${response.status}`);
+  const run = response.headers.get("X-Read-Run");
+  if (preview === "crop" && run && !data.has("run_id")) {
+    fields.push(["run_id", run]);
+    $("#read-log").textContent = `Log trên máy chủ · runtime/read_logs/${run}.jsonl`;
+  }
+  if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
+    yield* (await response.json()).results;
+    return;
+  }
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  try {
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += value;
+      let end;
+      while ((end = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 1);
+        if (line.trim()) yield JSON.parse(line);
+      }
+    }
+    if (buffer.trim()) yield JSON.parse(buffer);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function requestRecognition(item, fields) {
+  for await (const result of requestBatch([item], fields.filter(([key]) => key !== "run_id"))) {
+    if (result.error) throw new Error(result.error);
+    return result;
+  }
+  throw new Error("Chưa nhận được kết quả ảnh.");
 }
 
 async function recognizeQueue(event) {
@@ -468,33 +531,61 @@ async function recognizeQueue(event) {
   stopRequested = false;
   setBusy(true);
   $("#error").textContent = "";
+  runStarted = performance.now();
+  $("#read-log").textContent = "";
   let nextRefresh = 0;
   try {
-    for (const item of pending) {
-      if (stopRequested) break;
-      item.status = "running";
-      item.error = "";
-      if (performance.now() >= nextRefresh && !stopRequested) {
-        $("#upload-progress").textContent = `Đang xử lý ảnh #${item.number}`;
+    for (let offset = 0; offset < pending.length && !stopRequested;) {
+      const batch = [];
+      let bytes = 0;
+      const limit = supportsBufferedStream ? batchSize : 1;
+      while (offset < pending.length && batch.length < limit) {
+        const item = pending[offset];
+        if (batch.length && bytes + item.file.size > batchBytes) break;
+        bytes += item.file.size;
+        batch.push(item);
+        item.status = "running";
+        item.error = "";
+        offset += 1;
+      }
+      if (performance.now() >= nextRefresh) {
+        $("#upload-progress").textContent = `Đang xử lý nhóm ${batch.length} ảnh, bắt đầu từ #${batch[0].number}`;
         updateQueueSummary();
         nextRefresh = performance.now() + 150;
       }
 
+      let received = 0;
       try {
-        const result = await requestRecognition(item, fields);
-        item.fields = fields;
-        const {annotated, vehicles = [], ...summary} = result;
-        item.predicted = primaryPrediction(vehicles);
-        item.result = {...summary, vehicles: vehicles.map(({plate_image, ...vehicle}) => vehicle)};
-        item.status = "done";
-        recentPreviews.set(item, result);
-        if (recentPreviews.size > 12) recentPreviews.delete(recentPreviews.keys().next().value);
+        for await (const result of requestBatch(batch, fields, "crop")) {
+          const item = batch[received];
+          if (!item || result.filename !== item.name) throw new Error("Sai thứ tự ảnh trả về.");
+          if (result.error) {
+            item.status = "error";
+            item.error = result.error;
+          } else {
+            item.fields = fields;
+            const {annotated, vehicles = [], ...summary} = result;
+            item.predicted = primaryPrediction(vehicles);
+            item.result = {...summary, vehicles: vehicles.map(({plate_image, ...vehicle}) => vehicle)};
+            item.status = "done";
+          }
+          received += 1;
+          if (performance.now() >= nextRefresh || received === 1) {
+            updateQueueSummary();
+            nextRefresh = performance.now() + 500;
+          }
+        }
+        if (received < batch.length) throw new Error("Luồng trả kết quả kết thúc sớm.");
       } catch (error) {
-        item.status = "error";
-        item.error = error.message || String(error);
+        for (const item of batch.slice(received)) {
+          item.status = "error";
+          item.error = error.message || String(error);
+        }
       }
     }
   } finally {
+    runElapsed += performance.now() - runStarted;
+    runStarted = null;
     setBusy(false);
     updateQueueSummary();
     $("#upload-progress").textContent = stopRequested ? "Đã dừng." : "Đã xử lý xong lô ảnh.";
@@ -505,12 +596,14 @@ function stopRecognition() {
   if (!busy) return;
   stopRequested = true;
   $("#stop-recognition").disabled = true;
-  $("#upload-progress").textContent = "Đang hoàn tất ảnh hiện tại…";
+  $("#upload-progress").textContent = "Đang hoàn tất nhóm ảnh hiện tại…";
 }
 
 function clearQueue() {
   if (busy) return;
   queue.length = 0;
+  $("#read-log").textContent = "";
+  runElapsed = 0;
   page = 0;
   recentPreviews.clear();
   imageInputs.forEach((input) => { input.value = ""; });
@@ -526,11 +619,13 @@ $("#export-csv").onclick = () => {
     const safe = /^\s*[=+@-]|^[\t\r\n]/.test(text) ? "'" + text : text;
     return '"' + safe.replace(/"/g, '""') + '"';
   };
-  const rows = [["Tên tệp", "Biển chuẩn", "Biển OCR", "Loại xe", "Hãng", "Kết quả", "ms", "Lỗi"]];
+  const rows = [["Tên tệp", "Biển chuẩn", "Biển OCR", "Kết quả",
+    "Điểm detect biển (0–1)", "Điểm OCR (0–1)", "Biến thể OCR", "ms máy chủ", "Lỗi"]];
   for (const item of queue) {
     if (!["done", "error"].includes(item.status)) continue;
     rows.push([item.name, expectedValue(item, "plate"), item.predicted?.plate,
-      item.predicted?.vehicle_type, item.predicted?.brand, labels[classify(item, "plate")],
+      labels[classify(item, "plate")],
+      item.predicted?.detectionScore, item.predicted?.score, item.predicted?.variant,
       item.result?.elapsed_ms, item.error]);
   }
   const url = URL.createObjectURL(new Blob(["\uFEFF", rows.map((row) => row.map(field).join(",")).join("\r\n")],
@@ -551,10 +646,24 @@ $("#truth-file").addEventListener("change", async (event) => {
   const status = $("#truth-status");
   try {
     const file = input.files[0];
-    truth = file ? readTruth(await file.text()) : new Map();
+    orderedTruth = null;
+    if (file && /\.xlsx$/i.test(file.name)) {
+      const data = new FormData();
+      data.append("file", file);
+      const {rows} = await json("/api/plate/truth", {method: "POST", body: data});
+      if (rows[0]?.filename) {
+        truth = new Map(rows.map((row) => [pathKey(row.filename), row]));
+      } else {
+        truth = new Map();
+        orderedTruth = rows;
+      }
+    } else {
+      truth = file ? readTruth(await file.text()) : new Map();
+    }
     status.textContent = file ? `${file.name} · ${truth.size} nhãn` : "";
   } catch (error) {
     input.value = "";
+    orderedTruth = null;
     truth = new Map();
     status.textContent = error.message;
   } finally {

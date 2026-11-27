@@ -5,7 +5,7 @@ from time import monotonic
 from unittest.mock import Mock
 from unittest.mock import patch
 
-from vehicle_ai.playback import realtime_frames
+from vehicle_ai.playback import PlaybackProgress, realtime_frames
 
 
 class PlaybackTests(unittest.TestCase):
@@ -36,7 +36,8 @@ class PlaybackTests(unittest.TestCase):
             if index == 6:
                 preview_done.set()
 
-        frames = realtime_frames(capture, 20, 6, 0, preview)
+        progress = PlaybackProgress()
+        frames = realtime_frames(capture, 20, 6, 0, preview, frame_stride=2, progress=progress)
         try:
             first = next(frames)
             self.assertEqual(first, (0, 0))
@@ -45,7 +46,9 @@ class PlaybackTests(unittest.TestCase):
             remaining = list(frames)
         finally:
             frames.close()
-        self.assertEqual(remaining, [(5, 5)])
+        self.assertEqual(remaining, [(4, 4)])
+        self.assertEqual(progress.frames_read, 6)
+        self.assertEqual(progress.frames_eligible, 3)
         self.assertEqual([index for index, _ in displayed], list(range(1, 7)))
         for index, elapsed in displayed:
             self.assertGreaterEqual(elapsed + 0.005, (index - 1) / 20)

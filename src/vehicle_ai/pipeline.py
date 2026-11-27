@@ -12,7 +12,7 @@ from .capture import open_capture
 from .config import PipelineConfig
 from .inference import draw_anpr_preview, draw_recognition
 from .session import RecognitionSession
-from .playback import realtime_frames
+from .playback import PlaybackProgress, realtime_frames
 from .roi import draw_roi
 
 
@@ -60,8 +60,10 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
         count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
         total = int(count) if math.isfinite(count) and count > 0 else 0
         index = 0
+        analyzed_frames = 0
         stopped = False
         if realtime:
+            progress = PlaybackProgress()
             overlay_lock = Lock()
             overlay = None
             preview_clock = {"last": -math.inf}
@@ -87,14 +89,13 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
 
             with closing(realtime_frames(
                 capture, fps, total, max_seconds, preview_frame, should_stop,
+                frame_stride=config.detector_frame_stride, progress=progress,
             )) as frames:
                 for frame_index, frame in frames:
                     last_frame = frame
-                    index = frame_index + 1
-                    if frame_index % config.detector_frame_stride:
-                        continue
                     started = perf_counter()
                     publish(session.feed(frame, frame_index / fps))
+                    analyzed_frames += 1
                     inference_fps = 1 / max(perf_counter() - started, 1e-6)
                     # Preview reads an independent snapshot while OCR updates live tracks.
                     tracks = {}
@@ -106,6 +107,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                         overlay = (session.last_result.cpu(), tracks, inference_fps)
                     if on_diagnostic:
                         emit_diagnostics()
+            index = progress.frames_read
             stopped = bool(should_stop and should_stop())
         else:
             while not max_seconds or index / fps < max_seconds:
@@ -118,6 +120,7 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
                 last_frame = frame
                 if index % config.detector_frame_stride == 0:
                     publish(session.feed(frame, index / fps))
+                    analyzed_frames += 1
                 if on_frame and index % 10 == 0:
                     on_frame(index + 1, total, draw_recognition(session.last_result, session.tracks, config.roi))
                 if on_diagnostic and index % 10 == 0:
@@ -131,7 +134,11 @@ def analyze_video(path, camera, vehicle_weights, logo_model=None, plate_model=No
             reason = "user_stop"
         publish(session.finalize(reason))
         if on_stats:
-            stats = {"frames": index, "source_fps": fps, "content_seconds": index / fps}
+            stats = {
+                "frames": index, "source_fps": fps, "content_seconds": index / fps,
+                "analyzed_frames": analyzed_frames,
+                "unprocessed_eligible_frames": progress.frames_eligible - analyzed_frames if realtime else 0,
+            }
             shape = getattr(last_frame, "shape", None)
             if shape is not None and len(shape) >= 2:
                 stats["frame_size"] = f"{shape[1]}x{shape[0]}"

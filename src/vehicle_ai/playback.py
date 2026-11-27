@@ -1,10 +1,20 @@
 """Clock-paced preview with a bounded, latest-frame queue for inference."""
+from dataclasses import dataclass
 from queue import Empty, Full, Queue
 from threading import Event, Thread
 from time import monotonic
 
 
-def realtime_frames(capture, fps, total, max_seconds, on_frame, should_stop=None):
+@dataclass
+class PlaybackProgress:
+    frames_read: int = 0
+    frames_eligible: int = 0
+
+
+def realtime_frames(capture, fps, total, max_seconds, on_frame, should_stop=None, *,
+                    frame_stride=1, progress=None):
+    if progress is None:
+        progress = PlaybackProgress()
     pending = Queue(maxsize=1)
     finished = Event()
     cancelled = Event()
@@ -30,8 +40,10 @@ def realtime_frames(capture, fps, total, max_seconds, on_frame, should_stop=None
                 if start is None:
                     # Connection/model warmup must not become a playback backlog.
                     start = monotonic()
-                # Skip stale preview frames if decoding/encoding falls behind.
-                if index >= int((monotonic() - start) * fps) - 1:
+                progress.frames_read += 1
+                # Only frames eligible for inference can replace a pending inference frame.
+                if index % frame_stride == 0:
+                    progress.frames_eligible += 1
                     try:
                         pending.put_nowait((index, frame))
                     except Full:
@@ -40,8 +52,9 @@ def realtime_frames(capture, fps, total, max_seconds, on_frame, should_stop=None
                         except Empty:
                             pass
                         pending.put_nowait((index, frame))
-                    if on_frame:
-                        on_frame(index + 1, total, frame)
+                # Skip stale preview frames if decoding/encoding falls behind.
+                if on_frame and index >= int((monotonic() - start) * fps) - 1:
+                    on_frame(index + 1, total, frame)
                 index += 1
         except Exception as error:
             errors.append(error)

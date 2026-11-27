@@ -2,10 +2,38 @@
 import unittest
 from unittest.mock import Mock, patch
 
+from vehicle_ai.config import PipelineConfig
 from vehicle_ai.pipeline import analyze_video
 
 
 class PipelineStopTests(unittest.TestCase):
+    def test_realtime_duration_uses_source_frames_skipped_by_stride(self):
+        capture = Mock()
+        capture.isOpened.return_value = True
+        capture.get.return_value = 25
+        capture.read.return_value = (True, object())
+        session = Mock()
+        session.feed.return_value = []
+        session.finalize.return_value = []
+        stats = {}
+        with (
+            patch("vehicle_ai.pipeline.YOLO"),
+            patch("vehicle_ai.pipeline.RecognitionSession", return_value=session),
+            patch("vehicle_ai.pipeline.open_capture", return_value=capture),
+        ):
+            session.tracks = {}
+            analyze_video(
+                "video.mp4", "test", "model.pt", realtime=True, max_seconds=0.08,
+                config=PipelineConfig(vehicle_weights="model.pt", detector_frame_stride=3),
+                on_stats=stats.update,
+            )
+        session.feed.assert_called_once_with(capture.read.return_value[1], 0)
+        session.finalize.assert_called_once_with("duration_limit")
+        self.assertEqual(stats["frames"], 2)
+        self.assertEqual(stats["analyzed_frames"], 1)
+        self.assertEqual(stats["content_seconds"], 0.08)
+        self.assertEqual(stats["unprocessed_eligible_frames"], 0)
+
     def test_stop_finalizes_and_releases(self):
         capture = Mock()
         capture.isOpened.return_value = True

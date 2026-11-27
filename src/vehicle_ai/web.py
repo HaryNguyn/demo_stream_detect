@@ -4,13 +4,15 @@ import csv
 import io
 import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from shutil import copyfileobj
+from tempfile import SpooledTemporaryFile, TemporaryDirectory
 from threading import Condition, Event, Lock, Thread
 
 from flask import Flask, Response, abort, jsonify, request, send_file
 
 from .ip_camera import build_rtsp_url, mask_url, validate_stream_url
 from .settings import get_setting, image_root
+from .read_log import logged_read, run_id
 from .result_filter import EvidenceRecorder, image_score, plates_only_rows, unique_results
 
 
@@ -320,13 +322,25 @@ def create_app(store=None):
     def plate_page():
         return app.send_static_file("plate.html")
 
+    @app.post("/api/plate/truth")
+    def excel_truth():
+        from .excel_truth import read_excel_truth
+        from zipfile import BadZipFile
+
+        upload = request.files.get("file")
+        if not upload or Path(upload.filename or "").suffix.lower() != ".xlsx":
+            return jsonify(error="Hãy chọn tệp Excel .xlsx."), 400
+        try:
+            return jsonify(rows=read_excel_truth(upload.stream))
+        except (ValueError, BadZipFile, KeyError) as error:
+            return jsonify(error=str(error)), 400
+
     @app.get("/api/plate/config")
     def plate_config():
         from .plate_image import DEFAULT_OPTIONS
 
-        paths = {name: value for name, value in DEFAULT_OPTIONS.items() if name.endswith("_weights")
-                 or name in {"config", "ocr_config"}}
-        return jsonify(defaults=DEFAULT_OPTIONS,
+        paths = {name: DEFAULT_OPTIONS[name] for name in ("config", "plate_weights", "ocr_weights", "ocr_config")}
+        return jsonify(defaults=DEFAULT_OPTIONS, buffered_upload_stream=True,
                        available={name: Path(path).is_file() for name, path in paths.items()})
 
     @app.post("/api/plate/recognize")
@@ -341,16 +355,46 @@ def create_app(store=None):
             if Path(item.filename).suffix.lower() not in allowed:
                 return jsonify(error=f"Định dạng ảnh không được hỗ trợ: {item.filename}"), 400
         options = {key: value.strip() for key, value in request.form.items()}
-        results = []
-        for item in uploads:
+        compact = options.pop("preview", "") == "crop"
+        batch = run_id(options.pop("run_id", None))
+        def recognize_file(filename, read):
             try:
-                result = recognize_image(item.read(), options)
-                result["filename"] = item.filename
+                result = logged_read(batch, filename, lambda: recognize_image(
+                    read(), options, **({"preview": "crop"} if compact else {}),
+                ), input_kind=options.get("input_kind", "auto"))
+                return {**result, "filename": filename}
             except (ValueError, FileNotFoundError) as error:
-                result = {"filename": item.filename, "error": str(error)}
+                return {"filename": filename, "error": str(error)}
             except Exception as error:
-                result = {"filename": item.filename, "error": f"{type(error).__name__}: {error}"}
-            results.append(result)
-        return jsonify(results=results)
+                return {"filename": filename, "error": f"{type(error).__name__}: {error}"}
+
+        if request.accept_mimetypes.best == "application/x-ndjson":
+            # The response iterator can outlive Flask's multipart upload streams.
+            spool = SpooledTemporaryFile(max_size=4 * 1024 * 1024)
+            sizes = []
+            try:
+                for item in uploads:
+                    start = spool.tell()
+                    copyfileobj(item.stream, spool)
+                    sizes.append((item.filename, spool.tell() - start))
+                spool.seek(0)
+            except BaseException:
+                spool.close()
+                raise
+
+            def lines():
+                with spool:
+                    for filename, size in sizes:
+                        payload = spool.read(size)
+                        row = recognize_file(filename, lambda: payload)
+                        yield json.dumps(row, ensure_ascii=False) + "\n"
+
+            response = Response(lines(), mimetype="application/x-ndjson",
+                                headers={"X-Accel-Buffering": "no", "X-Read-Run": batch})
+            response.call_on_close(spool.close)
+            return response
+        response = jsonify(results=[recognize_file(item.filename, item.read) for item in uploads])
+        response.headers["X-Read-Run"] = batch
+        return response
 
     return app

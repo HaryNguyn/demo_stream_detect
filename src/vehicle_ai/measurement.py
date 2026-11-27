@@ -93,13 +93,16 @@ def compact_result(result):
             "plate_text": item.get("plate_text", ""),
             "plate_score": item.get("plate_score", 0),
             "plate_confidence": item.get("plate_confidence", 0),
+            "ocr_variant": item.get("ocr_variant", ""),
             "accepted": bool(item.get("accepted")),
             "bbox": item.get("bbox"),
         })
     return {
         "width": result.get("width", 0), "height": result.get("height", 0),
+        "input_route": result.get("input_route", "scene"),
         "vehicles": vehicles, "summary": result.get("summary", {}),
         "elapsed_ms": result.get("elapsed_ms", 0),
+        "timings_ms": result.get("timings_ms", {}),
     }
 
 
@@ -137,7 +140,8 @@ def summarize_images(rows, truth=None, warmup=0):
     ``elapsed_total_s`` on each row gives a real cumulative wall time.
     """
     truth = truth or {}
-    warmup = max(0, int(warmup))
+    warmup = min(len(rows), max(0, int(warmup)))
+    measured = len(rows) - warmup
     timings = [float(row["elapsed_ms"]) for row in rows[warmup:]
                if not row.get("error") and row.get("elapsed_ms") is not None]
     if rows and all("elapsed_total_s" in row for row in rows):
@@ -148,13 +152,16 @@ def summarize_images(rows, truth=None, warmup=0):
     summary = {
         "images": len(rows),
         "errors": sum(1 for row in rows if row.get("error")),
-        "vehicles": sum(len(row.get("vehicles") or []) for row in rows),
+        "vehicles": sum(len(row.get("vehicles") or []) for row in rows if row.get("input_route") != "crop"),
         "plates_detected": sum(1 for row in rows for item in row.get("vehicles") or []
                                if item.get("plate_detected")),
         "plates_accepted": sum(1 for row in rows for item in row.get("vehicles") or []
                                if item.get("accepted")),
         "wall_seconds": round(wall, 3),
-        "images_per_second": round(len(rows) / wall, 3) if wall else None,
+        "images_per_second": round(measured / wall, 3) if wall else None,
+        "measured_images": measured,
+        "mean_ms": round(statistics.mean(timings), 2) if timings else None,
+        "wall_ms_per_image": round(wall * 1000 / measured, 2) if wall and measured else None,
         "median_ms": round(statistics.median(timings), 2) if timings else None,
         "p95_ms": round(_percentile(timings, 0.95), 2) if timings else None,
         "max_ms": round(max(timings), 2) if timings else None,
